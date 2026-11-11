@@ -36,6 +36,21 @@ npm run dev
 
 Ports 5000 and 5173 may already be used by other local projects, so this shop uses **5050** and **5174**.
 
+## Deploy on Vercel
+
+The live shopfront is expected at `https://surprisesphere.vercel.app`.
+
+1. Set the Vercel project **Root Directory** to the repository root (not `frontend/` only).
+2. Keep `vercel.json` at the repo root. It builds the React app and routes `/api/*` to the Express serverless function.
+3. In Vercel Environment Variables set:
+   - `CLIENT_URL=https://surprisesphere.vercel.app,http://localhost:5174`
+   - `MONGO_URI` when MongoDB Atlas is ready
+   - `NODE_ENV=production`
+4. Leave `VITE_API_URL` empty so the browser calls same-origin `/api/...`.
+5. Redeploy after pushing to `main`.
+
+Until MongoDB is connected, the API still serves the temporary seed catalogue so the homepage and listing pages can load.
+
 ### Backend only
 
 ```bash

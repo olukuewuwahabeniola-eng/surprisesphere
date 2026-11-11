@@ -1,8 +1,18 @@
 import axios from 'axios';
 
+function resolveBaseUrl() {
+  const configured = String(import.meta.env.VITE_API_URL || '').trim().replace(/\/$/, '');
+  if (configured) {
+    return configured;
+  }
+  // Same-origin in production (Vercel rewrites /api to the Express function).
+  // Empty base in Vite dev so the proxy at /api can be used.
+  return '';
+}
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '',
-  timeout: 10000,
+  baseURL: resolveBaseUrl(),
+  timeout: 15000,
 });
 
 export function getHomepage() {
@@ -50,5 +60,14 @@ export function sendEnquiry(payload) {
 }
 
 export function readError(error, fallback) {
-  return error?.response?.data?.message || fallback;
+  if (error?.response?.data?.message) {
+    return error.response.data.message;
+  }
+  if (error?.code === 'ERR_NETWORK' || error?.message === 'Network Error') {
+    return 'The shop API could not be reached. Check that the backend is deployed and reachable.';
+  }
+  if (error?.response?.status === 404) {
+    return 'The shop API route was not found. The backend may not be connected to this deployment.';
+  }
+  return fallback;
 }

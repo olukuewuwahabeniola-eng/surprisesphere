@@ -7,7 +7,7 @@ import ProductSection from '../components/ProductSection';
 import { useShop } from '../context/ShopContext';
 
 export default function HomePage() {
-  const { catalog, status, loadCatalog } = useShop();
+  const { catalog, status, catalogError, loadCatalog } = useShop();
   const location = useLocation();
 
   useEffect(() => {
@@ -38,8 +38,11 @@ export default function HomePage() {
   if (status === 'error' || !catalog) {
     return (
       <div className="container home-state">
-        <h1>The shop could not be loaded</h1>
-        <p>The homepage catalogue comes from the Surprise Fashion Sphere API. Start the backend, then try again.</p>
+        <h1>This shop is not available</h1>
+        <p>
+          {catalogError ||
+            'The homepage catalogue comes from the Surprise Fashion Sphere API. Once the API is reachable, the shop will load here.'}
+        </p>
         <button type="button" className="button button-wine" onClick={loadCatalog}>
           Try again
         </button>

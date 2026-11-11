@@ -3,10 +3,22 @@
   "private": true,
   "version": "1.0.0",
   "description": "Surprise Fashion Sphere storefront and API",
+  "type": "module",
   "scripts": {
     "dev": "concurrently -n api,web -c magenta,cyan \"npm run dev --prefix backend\" \"npm run dev --prefix frontend\"",
     "dev:api": "npm run dev --prefix backend",
-    "dev:web": "npm run dev --prefix frontend"
+    "dev:web": "npm run dev --prefix frontend",
+    "build": "npm run build --prefix frontend",
+    "start": "npm run start --prefix backend",
+    "seed": "npm run seed --prefix backend"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "express-rate-limit": "^8.2.1",
+    "helmet": "^8.1.0",
+    "mongoose": "^8.20.1"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"

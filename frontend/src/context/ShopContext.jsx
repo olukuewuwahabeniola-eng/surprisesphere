@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { getHomepage } from '../services/api';
+import { getHomepage, readError } from '../services/api';
 
 const ShopContext = createContext(null);
 const STORAGE_KEY = 'sfs-shop-v1';
@@ -30,6 +30,7 @@ export function ShopProvider({ children }) {
   const [bag, setBag] = useState(readStorage);
   const [catalog, setCatalog] = useState(null);
   const [status, setStatus] = useState('loading');
+  const [catalogError, setCatalogError] = useState('');
   const [cartOpen, setCartOpen] = useState(false);
   const [wishOpen, setWishOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
@@ -40,11 +41,18 @@ export function ShopProvider({ children }) {
 
   const loadCatalog = useCallback(async () => {
     setStatus('loading');
+    setCatalogError('');
     try {
       const data = await getHomepage();
       setCatalog(data);
       setStatus('ready');
-    } catch {
+    } catch (error) {
+      setCatalogError(
+        readError(
+          error,
+          'This shop is not available right now because the catalogue API did not respond.',
+        ),
+      );
       setStatus('error');
     }
   }, []);
@@ -108,6 +116,7 @@ export function ShopProvider({ children }) {
   const value = {
     catalog,
     status,
+    catalogError,
     products,
     cart: bag.cart,
     wishlist: bag.wishlist,
