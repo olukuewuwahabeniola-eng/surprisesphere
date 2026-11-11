@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 
 export default function Hero({ slides }) {
   const [index, setIndex] = useState(0);
+  const [animate, setAnimate] = useState(true);
   const slide = slides[index];
 
   useEffect(() => {
@@ -11,10 +12,30 @@ export default function Hero({ slides }) {
       return undefined;
     }
     const timer = window.setInterval(() => {
-      setIndex((current) => (current + 1) % slides.length);
-    }, 6500);
+      setAnimate(false);
+      window.setTimeout(() => {
+        setIndex((current) => (current + 1) % slides.length);
+        setAnimate(true);
+      }, 180);
+    }, 7000);
     return () => window.clearInterval(timer);
   }, [slides.length]);
+
+  function goTo(nextIndex) {
+    if (nextIndex === index) {
+      return;
+    }
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce) {
+      setIndex(nextIndex);
+      return;
+    }
+    setAnimate(false);
+    window.setTimeout(() => {
+      setIndex(nextIndex);
+      setAnimate(true);
+    }, 180);
+  }
 
   if (!slide) {
     return null;
@@ -23,13 +44,14 @@ export default function Hero({ slides }) {
   return (
     <section className="hero" aria-roledescription="carousel" aria-label="Featured">
       <div className="container">
-        <article className="hero-card">
+        <article className={`hero-card ${animate ? 'is-active' : 'is-leaving'}`}>
           <div className="hero-copy">
+            <span className="hero-sparkles" aria-hidden="true" />
             <h1>{slide.title}</h1>
-            <p>{slide.subtitle}</p>
-            <Link className="button button-wine" to={slide.href}>
+            <p className="hero-subtitle">{slide.subtitle}</p>
+            <Link className="button button-wine hero-cta" to={slide.href}>
               {slide.cta}
-              <span aria-hidden="true"> →</span>
+              <span aria-hidden="true">→</span>
             </Link>
           </div>
           <div className="hero-photo">
@@ -44,7 +66,7 @@ export default function Hero({ slides }) {
                 aria-label={`Show slide ${dotIndex + 1}`}
                 aria-selected={dotIndex === index}
                 role="tab"
-                onClick={() => setIndex(dotIndex)}
+                onClick={() => goTo(dotIndex)}
               />
             ))}
           </div>
