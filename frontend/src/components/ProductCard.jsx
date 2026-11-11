@@ -34,7 +34,7 @@ export default function ProductCard({ product }) {
         <p className="product-price">{formatNaira(product.price)}</p>
         <button
           type="button"
-          className="button button-wine button-block"
+          className="button button-wine button-block button-rect"
           onClick={() => {
             addToCart(product);
             setAdded(true);
