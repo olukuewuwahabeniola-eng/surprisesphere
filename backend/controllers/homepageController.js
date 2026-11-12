@@ -3,10 +3,12 @@ import { getHomepageBanners, getHomepagePayload } from '../services/homepageServ
 import { listFeaturedProducts } from '../services/productService.js';
 import { listActiveCategories } from '../services/categoryService.js';
 import { seedGetHomepage, seedListFeatured } from '../services/seedFallback.js';
+import { getStoreSettings } from '../services/storeService.js';
 
 export async function getHomepage(req, res) {
   if (!isDbConnected()) {
-    res.json(seedGetHomepage());
+    const store = await getStoreSettings();
+    res.json({ ...seedGetHomepage(), store });
     return;
   }
   const payload = await getHomepagePayload();

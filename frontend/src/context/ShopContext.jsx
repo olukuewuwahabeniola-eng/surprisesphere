@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { getHomepage, readError } from '../services/api';
+import { getHomepage, getStore, readError } from '../services/api';
+import { cartLineKey } from '../utils/whatsappOrder';
 
 const ShopContext = createContext(null);
 const STORAGE_KEY = 'sfs-shop-v1';
@@ -7,8 +8,17 @@ const STORAGE_KEY = 'sfs-shop-v1';
 function readStorage() {
   try {
     const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || '');
+    const cart = Array.isArray(parsed?.cart)
+      ? parsed.cart.map((item) => ({
+          ...item,
+          size: item.size || '',
+          colour: item.colour || '',
+          qty: Math.max(1, Number(item.qty) || 1),
+          lineKey: item.lineKey || cartLineKey(item),
+        }))
+      : [];
     return {
-      cart: Array.isArray(parsed?.cart) ? parsed.cart : [],
+      cart,
       wishlist: Array.isArray(parsed?.wishlist) ? parsed.wishlist : [],
     };
   } catch {
@@ -16,19 +26,26 @@ function readStorage() {
   }
 }
 
-function snapshot(product) {
-  return {
+function snapshot(product, { size = '', colour = '', price, image } = {}) {
+  const item = {
     id: product.id,
     name: product.name,
-    price: product.price,
-    image: product.image,
+    price: Number.isFinite(Number(price)) ? Number(price) : product.price,
+    image: image || product.image,
     alt: product.alt,
+    size: size || '',
+    colour: colour || '',
+  };
+  return {
+    ...item,
+    lineKey: cartLineKey(item),
   };
 }
 
 export function ShopProvider({ children }) {
   const [bag, setBag] = useState(readStorage);
   const [catalog, setCatalog] = useState(null);
+  const [store, setStore] = useState({ whatsappNumber: '', whatsappConfigured: false });
   const [status, setStatus] = useState('loading');
   const [catalogError, setCatalogError] = useState('');
   const [cartOpen, setCartOpen] = useState(false);
@@ -43,8 +60,18 @@ export function ShopProvider({ children }) {
     setStatus('loading');
     setCatalogError('');
     try {
-      const data = await getHomepage();
+      const [data, storeData] = await Promise.all([
+        getHomepage(),
+        getStore().catch(() => null),
+      ]);
       setCatalog(data);
+      const nextStore = data.store || storeData || { whatsappNumber: '', whatsappConfigured: false };
+      setStore({
+        whatsappNumber: String(nextStore.whatsappNumber || '').replace(/\D/g, ''),
+        whatsappConfigured: Boolean(
+          nextStore.whatsappConfigured || String(nextStore.whatsappNumber || '').replace(/\D/g, ''),
+        ),
+      });
       setStatus('ready');
     } catch (error) {
       setCatalogError(
@@ -71,30 +98,41 @@ export function ShopProvider({ children }) {
   const cartCount = bag.cart.reduce((sum, item) => sum + item.qty, 0);
   const subtotal = bag.cart.reduce((sum, item) => sum + item.price * item.qty, 0);
 
-  function addToCart(product) {
+  function addToCart(product, options = {}) {
+    const next = snapshot(product, {
+      size: options.size || '',
+      colour: options.colour || '',
+      price: options.price,
+      image: options.image,
+    });
+
     setBag((current) => {
-      const existing = current.cart.find((item) => item.id === product.id);
+      const existing = current.cart.find((item) => item.lineKey === next.lineKey);
       const cart = existing
         ? current.cart.map((item) =>
-            item.id === product.id ? { ...item, qty: item.qty + 1 } : item,
+            item.lineKey === next.lineKey
+              ? { ...item, qty: item.qty + 1, price: next.price, image: next.image }
+              : item,
           )
-        : [...current.cart, { ...snapshot(product), qty: 1 }];
+        : [...current.cart, { ...next, qty: 1 }];
       return { ...current, cart };
     });
   }
 
-  function changeQty(id, qty) {
+  function changeQty(lineKey, qty) {
     setBag((current) => ({
       ...current,
       cart:
         qty < 1
-          ? current.cart.filter((item) => item.id !== id)
-          : current.cart.map((item) => (item.id === id ? { ...item, qty } : item)),
+          ? current.cart.filter((item) => item.lineKey !== lineKey && item.id !== lineKey)
+          : current.cart.map((item) =>
+              item.lineKey === lineKey || item.id === lineKey ? { ...item, qty } : item,
+            ),
     }));
   }
 
-  function removeFromCart(id) {
-    changeQty(id, 0);
+  function removeFromCart(lineKey) {
+    changeQty(lineKey, 0);
   }
 
   function toggleWishlist(product) {
@@ -115,6 +153,7 @@ export function ShopProvider({ children }) {
 
   const value = {
     catalog,
+    store,
     status,
     catalogError,
     products,

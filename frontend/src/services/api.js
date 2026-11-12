@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { adminHeaders } from '../utils/adminAuth';
 
 function resolveBaseUrl() {
   const configured = String(import.meta.env.VITE_API_URL || '').trim().replace(/\/$/, '');
@@ -57,6 +58,233 @@ export function subscribeNewsletter(email) {
 
 export function sendEnquiry(payload) {
   return api.post('/api/enquiries', payload).then((response) => response.data);
+}
+
+export function getStore() {
+  return api.get('/api/store').then((response) => response.data);
+}
+
+export function updateStoreSettings({ adminKey, whatsappNumber }) {
+  return api
+    .put(
+      '/api/admin/store',
+      { whatsappNumber },
+      {
+        headers: adminHeaders(adminKey),
+      },
+    )
+    .then((response) => response.data);
+}
+
+export function listAdminProducts(adminKey, params = {}) {
+  return api
+    .get('/api/admin/products', {
+      params,
+      headers: adminHeaders(adminKey),
+    })
+    .then((response) => response.data);
+}
+
+export function getAdminProduct(adminKey, idOrSlug) {
+  return api
+    .get(`/api/admin/products/${idOrSlug}`, {
+      headers: adminHeaders(adminKey),
+    })
+    .then((response) => response.data);
+}
+
+export function createAdminProduct(adminKey, payload) {
+  return api
+    .post('/api/admin/products', payload, {
+      headers: adminHeaders(adminKey),
+    })
+    .then((response) => response.data);
+}
+
+export function updateAdminProduct(adminKey, idOrSlug, payload) {
+  return api
+    .patch(`/api/admin/products/${idOrSlug}`, payload, {
+      headers: adminHeaders(adminKey),
+    })
+    .then((response) => response.data);
+}
+
+export function deleteAdminProduct(adminKey, idOrSlug) {
+  return api
+    .delete(`/api/admin/products/${idOrSlug}`, {
+      headers: adminHeaders(adminKey),
+    })
+    .then((response) => response.data);
+}
+
+export function listAdminCategories(adminKey, params = {}) {
+  return api
+    .get('/api/admin/categories', {
+      params,
+      headers: adminHeaders(adminKey),
+    })
+    .then((response) => response.data);
+}
+
+export function uploadAdminImages(adminKey, files, { onUploadProgress } = {}) {
+  const formData = new FormData();
+  const list = Array.from(files || []);
+  list.forEach((file) => {
+    formData.append('images', file);
+  });
+
+  return api
+    .post('/api/admin/uploads/images', formData, {
+      headers: adminHeaders(adminKey),
+      timeout: 120000,
+      onUploadProgress,
+    })
+    .then((response) => response.data);
+}
+
+export function listAdminReviews(adminKey, params = {}) {
+  return api
+    .get('/api/admin/reviews', {
+      params,
+      headers: adminHeaders(adminKey),
+    })
+    .then((response) => response.data);
+}
+
+export function getAdminReview(adminKey, id) {
+  return api
+    .get(`/api/admin/reviews/${id}`, {
+      headers: adminHeaders(adminKey),
+    })
+    .then((response) => response.data);
+}
+
+export function approveAdminReview(adminKey, id) {
+  return api
+    .patch(`/api/admin/reviews/${id}/approve`, null, {
+      headers: adminHeaders(adminKey),
+    })
+    .then((response) => response.data);
+}
+
+export function rejectAdminReview(adminKey, id) {
+  return api
+    .patch(`/api/admin/reviews/${id}/reject`, null, {
+      headers: adminHeaders(adminKey),
+    })
+    .then((response) => response.data);
+}
+
+export function blockAdminReview(adminKey, id) {
+  return api
+    .patch(`/api/admin/reviews/${id}/block`, null, {
+      headers: adminHeaders(adminKey),
+    })
+    .then((response) => response.data);
+}
+
+export function unpublishAdminReview(adminKey, id) {
+  return api
+    .patch(`/api/admin/reviews/${id}/unpublish`, null, {
+      headers: adminHeaders(adminKey),
+    })
+    .then((response) => response.data);
+}
+
+export function restoreAdminReview(adminKey, id) {
+  return api
+    .patch(`/api/admin/reviews/${id}/restore`, null, {
+      headers: adminHeaders(adminKey),
+    })
+    .then((response) => response.data);
+}
+
+export function deleteAdminReview(adminKey, id) {
+  return api
+    .delete(`/api/admin/reviews/${id}`, {
+      headers: adminHeaders(adminKey),
+    })
+    .then((response) => response.data);
+}
+
+export function listAdminReviewPhotos(adminKey, params = {}) {
+  return api
+    .get('/api/admin/review-photos', {
+      params,
+      headers: adminHeaders(adminKey),
+    })
+    .then((response) => response.data);
+}
+
+export function uploadAdminReviewPhotos(adminKey, { files, caption, productId, placement, published }, { onUploadProgress } = {}) {
+  const formData = new FormData();
+  Array.from(files || []).forEach((file) => {
+    formData.append('images', file);
+  });
+  if (caption != null) {
+    formData.append('caption', caption);
+  }
+  if (productId) {
+    formData.append('productId', productId);
+  }
+  if (placement) {
+    formData.append('placement', placement);
+  }
+  if (published != null) {
+    formData.append('published', String(Boolean(published)));
+  }
+
+  return api
+    .post('/api/admin/review-photos', formData, {
+      headers: adminHeaders(adminKey),
+      timeout: 120000,
+      onUploadProgress,
+    })
+    .then((response) => response.data);
+}
+
+export function updateAdminReviewPhoto(adminKey, id, payload) {
+  return api
+    .patch(`/api/admin/review-photos/${id}`, payload, {
+      headers: adminHeaders(adminKey),
+    })
+    .then((response) => response.data);
+}
+
+export function publishAdminReviewPhoto(adminKey, id) {
+  return api
+    .patch(`/api/admin/review-photos/${id}/publish`, null, {
+      headers: adminHeaders(adminKey),
+    })
+    .then((response) => response.data);
+}
+
+export function unpublishAdminReviewPhoto(adminKey, id) {
+  return api
+    .patch(`/api/admin/review-photos/${id}/unpublish`, null, {
+      headers: adminHeaders(adminKey),
+    })
+    .then((response) => response.data);
+}
+
+export function reorderAdminReviewPhotos(adminKey, orderedIds) {
+  return api
+    .patch(
+      '/api/admin/review-photos/reorder',
+      { orderedIds },
+      {
+        headers: adminHeaders(adminKey),
+      },
+    )
+    .then((response) => response.data);
+}
+
+export function deleteAdminReviewPhoto(adminKey, id) {
+  return api
+    .delete(`/api/admin/review-photos/${id}`, {
+      headers: adminHeaders(adminKey),
+    })
+    .then((response) => response.data);
 }
 
 export function readError(error, fallback) {

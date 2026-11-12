@@ -1,5 +1,6 @@
 export const DEFAULT_PAGE_SIZE = 24;
-export const MAX_PAGE_SIZE = 48;
+/** Max items returned in one API response batch. Not a store-wide product cap. */
+export const MAX_PAGE_SIZE = 100;
 export const HOMEPAGE_CURATED_COUNT = 5;
 
 export function readPagination(query = {}) {

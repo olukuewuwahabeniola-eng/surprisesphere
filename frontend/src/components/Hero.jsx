@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 
+const CROSSFADE_MS = 1100;
+const HOLD_MS = 6500;
+
 export default function Hero({ slides }) {
   const [index, setIndex] = useState(0);
-  const [animate, setAnimate] = useState(true);
   const slide = slides[index];
 
   useEffect(() => {
@@ -11,30 +13,19 @@ export default function Hero({ slides }) {
     if (reduce || slides.length < 2) {
       return undefined;
     }
+
     const timer = window.setInterval(() => {
-      setAnimate(false);
-      window.setTimeout(() => {
-        setIndex((current) => (current + 1) % slides.length);
-        setAnimate(true);
-      }, 180);
-    }, 7000);
+      setIndex((current) => (current + 1) % slides.length);
+    }, HOLD_MS);
+
     return () => window.clearInterval(timer);
-  }, [slides.length]);
+  }, [index, slides.length]);
 
   function goTo(nextIndex) {
     if (nextIndex === index) {
       return;
     }
-    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (reduce) {
-      setIndex(nextIndex);
-      return;
-    }
-    setAnimate(false);
-    window.setTimeout(() => {
-      setIndex(nextIndex);
-      setAnimate(true);
-    }, 180);
+    setIndex(nextIndex);
   }
 
   if (!slide) {
@@ -44,19 +35,33 @@ export default function Hero({ slides }) {
   return (
     <section className="hero" aria-roledescription="carousel" aria-label="Featured">
       <div className="container">
-        <article className={`hero-card ${animate ? 'is-active' : 'is-leaving'}`}>
-          <div className="hero-copy">
-            <span className="hero-sparkles" aria-hidden="true" />
+        <article className="hero-stage">
+          <div className="hero-media" aria-hidden="true">
+            {slides.map((item, mediaIndex) => (
+              <img
+                key={item.id}
+                className={mediaIndex === index ? 'hero-frame is-active' : 'hero-frame'}
+                src={item.image}
+                alt=""
+                style={{ transitionDuration: `${CROSSFADE_MS}ms` }}
+              />
+            ))}
+          </div>
+
+          <div className="hero-veil" aria-hidden="true" />
+
+          <div className="hero-copy" key={slide.id}>
+            <p className="hero-brand">Surprise Fashion Sphere</p>
             <h1>{slide.title}</h1>
             <p className="hero-subtitle">{slide.subtitle}</p>
             <Link className="button button-wine hero-cta" to={slide.href}>
-              {slide.cta}
-              <span aria-hidden="true">→</span>
+              <span>{slide.cta || 'Shop Now'}</span>
+              <span className="hero-cta-arrow" aria-hidden="true">
+                →
+              </span>
             </Link>
           </div>
-          <div className="hero-photo">
-            <img key={slide.id} src={slide.image} alt={slide.alt} />
-          </div>
+
           <div className="dots" role="tablist" aria-label="Featured slides">
             {slides.map((item, dotIndex) => (
               <button
@@ -70,6 +75,10 @@ export default function Hero({ slides }) {
               />
             ))}
           </div>
+
+          <p className="sr-only" aria-live="polite">
+            {slide.title}. {slide.subtitle}
+          </p>
         </article>
       </div>
     </section>

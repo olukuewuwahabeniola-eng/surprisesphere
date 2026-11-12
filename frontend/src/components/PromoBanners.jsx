@@ -4,8 +4,13 @@ export default function PromoBanners({ promos }) {
   return (
     <section className="section" id="collections" aria-label="Collections">
       <div className="container promo-grid">
-        {promos.map((promo) => (
-          <article key={promo.id} className={`promo promo-${promo.tone}`}>
+        {promos.map((promo, index) => (
+          <article
+            key={promo.id}
+            className={`promo promo-${promo.tone}`}
+            data-reveal
+            style={{ '--reveal-delay': `${index * 90}ms` }}
+          >
             <img src={promo.image} alt={promo.alt} />
             <div className="promo-copy">
               <h2>{promo.title}</h2>

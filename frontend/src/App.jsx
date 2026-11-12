@@ -1,5 +1,8 @@
 import { Route, Routes } from 'react-router-dom';
 import Layout from './components/Layout';
+import AdminPage from './pages/AdminPage';
+import AdminProductsPage from './pages/AdminProductsPage';
+import AdminReviewsPage from './pages/AdminReviewsPage';
 import ContactPage from './pages/ContactPage';
 import HomePage from './pages/HomePage';
 import InfoPage from './pages/InfoPage';
@@ -16,6 +19,9 @@ export default function App() {
         <Route path="/shop/:slug" element={<ProductListingPage mode="category" />} />
         <Route path="/about" element={<InfoPage slug="about" />} />
         <Route path="/contact" element={<ContactPage />} />
+        <Route path="/admin" element={<AdminPage />} />
+        <Route path="/admin/products" element={<AdminProductsPage />} />
+        <Route path="/admin/reviews" element={<AdminReviewsPage />} />
         <Route path="/help/:slug" element={<InfoPage />} />
         <Route path="*" element={<InfoPage slug="missing" />} />
       </Routes>

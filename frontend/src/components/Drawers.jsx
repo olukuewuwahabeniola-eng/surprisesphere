@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useShop } from '../context/ShopContext';
 import { useBodyLock } from '../hooks/useBodyLock';
 import { formatNaira } from '../utils/money';
+import { buildWhatsAppOrderUrl, cartLineKey, lineSubtotal } from '../utils/whatsappOrder';
 
 function Drawer({ title, open, onClose, children }) {
   useEffect(() => {
@@ -49,46 +50,86 @@ export default function Drawers() {
     removeFromCart,
     toggleWishlist,
     subtotal,
+    store,
   } = useShop();
 
   useBodyLock(cartOpen || wishOpen);
+
+  const orderUrl = buildWhatsAppOrderUrl(store?.whatsappNumber, cart, subtotal);
+  const canOrder = Boolean(orderUrl);
 
   return (
     <>
       <Drawer title="Your bag" open={cartOpen} onClose={() => setCartOpen(false)}>
         {cart.length === 0 ? (
-          <p className="drawer-empty">Your bag is empty. Add a piece from the homepage.</p>
+          <p className="drawer-empty">Your bag is empty. Add a piece from the shop.</p>
         ) : (
           <ul className="drawer-list">
-            {cart.map((item) => (
-              <li key={item.id}>
-                <img src={item.image} alt="" />
-                <div>
-                  <strong>{item.name}</strong>
-                  <p>{formatNaira(item.price)}</p>
-                  <div className="qty">
-                    <button type="button" onClick={() => changeQty(item.id, item.qty - 1)} aria-label="Decrease quantity">
-                      −
-                    </button>
-                    <span>{item.qty}</span>
-                    <button type="button" onClick={() => changeQty(item.id, item.qty + 1)} aria-label="Increase quantity">
-                      +
-                    </button>
+            {cart.map((item) => {
+              const key = item.lineKey || cartLineKey(item);
+              const variation = [item.size && `Size: ${item.size}`, item.colour && `Colour: ${item.colour}`]
+                .filter(Boolean)
+                .join(' · ');
+              return (
+                <li key={key}>
+                  <img src={item.image} alt="" />
+                  <div>
+                    <strong>{item.name}</strong>
+                    {variation && <p className="drawer-variant">{variation}</p>}
+                    <p className="drawer-unit">{formatNaira(item.price)} each</p>
+                    <div className="qty">
+                      <button
+                        type="button"
+                        onClick={() => changeQty(key, item.qty - 1)}
+                        aria-label={`Decrease quantity for ${item.name}`}
+                      >
+                        −
+                      </button>
+                      <span>{item.qty}</span>
+                      <button
+                        type="button"
+                        onClick={() => changeQty(key, item.qty + 1)}
+                        aria-label={`Increase quantity for ${item.name}`}
+                      >
+                        +
+                      </button>
+                    </div>
+                    <p className="drawer-line-total">Subtotal {formatNaira(lineSubtotal(item))}</p>
                   </div>
-                </div>
-                <button type="button" className="text-button" onClick={() => removeFromCart(item.id)}>
-                  Remove
-                </button>
-              </li>
-            ))}
+                  <button type="button" className="text-button" onClick={() => removeFromCart(key)}>
+                    Remove
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         )}
         <footer className="drawer-foot">
           <p>
-            <span>Subtotal</span>
+            <span>Grand total</span>
             <strong>{formatNaira(subtotal)}</strong>
           </p>
-          <p className="drawer-note">Checkout, delivery and payment are not open yet. This bag stays on this device.</p>
+          {cart.length > 0 && (
+            <>
+              {canOrder ? (
+                <a
+                  className="button button-wine button-block button-rect whatsapp-order"
+                  href={orderUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Proceed to Order on WhatsApp
+                </a>
+              ) : (
+                <p className="drawer-note">
+                  WhatsApp ordering is not ready yet. The store still needs to set its business number in Admin.
+                </p>
+              )}
+              <p className="drawer-note">
+                This opens WhatsApp with your bag details. The shop will confirm availability, then share payment and delivery instructions. No payment is taken on this website.
+              </p>
+            </>
+          )}
         </footer>
       </Drawer>
 

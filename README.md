@@ -22,7 +22,11 @@ npm install --prefix frontend
 
 Copy `backend/.env.example` to `backend/.env` if you do not already have one.
 
-Set `MONGO_URI` to your MongoDB connection string. The API can start without MongoDB, but catalogue data then comes from a temporary seed fallback. Newsletter signup and the contact form only save when MongoDB is connected.
+Set `MONGO_URI` to your MongoDB connection string. The API can start without MongoDB, but catalogue data then comes from a temporary seed fallback. Newsletter signup and Admin WhatsApp number saves need MongoDB.
+
+Orders are placed through **Proceed to Order on WhatsApp** in the bag. This site does not process payments.
+
+Configure the WhatsApp business number (digits with country code, no `+`) in Admin at `/admin`, or set `WHATSAPP_BUSINESS_NUMBER` and `ADMIN_KEY` in `backend/.env`.
 
 Start both apps:
 
@@ -99,8 +103,8 @@ Listing endpoints use pagination with no fixed total product quota.
 ## Still needed from the business
 
 - Working MongoDB connection (`MONGO_URI`)
-- WhatsApp and TikTok URLs (`frontend/.env`)
-- Public phone, email and address
-- Paystack, Cloudinary and JWT secrets when those stages start
+- Real WhatsApp business number (via `/admin` or `WHATSAPP_BUSINESS_NUMBER`)
+- `ADMIN_KEY` for saving store settings
+- Cloudinary / JWT when those product-admin stages start
 
-Do not put real secrets in the frontend.
+Do not invent a WhatsApp number. Do not put real secrets in the frontend.

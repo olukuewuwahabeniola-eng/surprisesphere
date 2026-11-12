@@ -3,14 +3,15 @@ import { HOMEPAGE_CURATED_COUNT } from '../utils/pagination.js';
 import { requireDb } from '../utils/requireDb.js';
 import { listActiveCategories } from './categoryService.js';
 import { getCuratedProducts } from './productService.js';
+import { getStoreSettings } from './storeService.js';
 
 const DEFAULT_HOMEPAGE = {
   announcement: 'Fast & Reliable Delivery Across Nigeria  |  Shop with Confidence',
   heroSlides: [
     {
       id: 'step-out',
-      title: 'Step Out\nin Style',
-      subtitle: 'Quality, Affordable Bags, Shoes, Headwear & More',
+      title: 'BEAUTY,\nREIMAGINED.',
+      subtitle: 'A considered edit of bags, footwear, headwear and more—styled for the woman who arrives with intention.',
       cta: 'Shop Now',
       href: '/best-sellers',
       image: '/images/hero-1.jpg',
@@ -18,27 +19,27 @@ const DEFAULT_HOMEPAGE = {
     },
     {
       id: 'bags',
-      title: 'Carry it\nwith you',
-      subtitle: 'Handbags, totes and small bags for the day and the evening',
-      cta: 'Shop Bags',
+      title: 'THE PERFECT\nFINISH.',
+      subtitle: 'Handbags that complete every look—quiet luxury for day, soft drama for evening.',
+      cta: 'Shop Now',
       href: '/shop/bags',
       image: '/images/prod-handbag.jpg',
       alt: 'Warm orange woven handbag with a top handle',
     },
     {
       id: 'shoes',
-      title: 'Shoes that\nkeep up',
-      subtitle: 'Heels, slides and everyday pairs for work, owambe and weekends',
-      cta: 'Shop Footwear',
+      title: 'STEP OUT.\nSTAND APART.',
+      subtitle: 'Heels, slides and everyday pairs made for work, owambe and the weekend in between.',
+      cta: 'Shop Now',
       href: '/shop/shoes',
       image: '/images/cat-shoes.jpg',
       alt: 'Floral pointed-toe heels on a pale blue set',
     },
     {
       id: 'clothing',
-      title: 'Dress for\nthe moment',
-      subtitle: 'Clothing and accessories, alongside bags, shoes and headwear',
-      cta: 'View the Edit',
+      title: 'MAKE EVERY\nENTRANCE\nUNFORGETTABLE.',
+      subtitle: 'Dresses and occasion pieces designed to hold the room—and the moment.',
+      cta: 'Shop Now',
       href: '/shop/clothing',
       image: '/images/prod-dress.jpg',
       alt: 'Woman in a red gown standing outdoors',
@@ -90,11 +91,12 @@ export async function getHomepagePayload() {
   const bestLimit = content.curatedBestSellerLimit || HOMEPAGE_CURATED_COUNT;
   const newLimit = content.curatedNewArrivalLimit || HOMEPAGE_CURATED_COUNT;
 
-  const [bestSellers, newArrivals, featuredProducts, featuredCategories] = await Promise.all([
+  const [bestSellers, newArrivals, featuredProducts, featuredCategories, store] = await Promise.all([
     getCuratedProducts({ bestSeller: true, limit: bestLimit }),
     getCuratedProducts({ newArrival: true, limit: newLimit }),
     getCuratedProducts({ featured: true, limit: bestLimit }),
     listActiveCategories({ featuredOnly: true }),
+    getStoreSettings(),
   ]);
 
   const categories =
@@ -117,6 +119,7 @@ export async function getHomepagePayload() {
     featuredCategories: featuredCategories.categories,
     promos: content.promos?.length ? content.promos : DEFAULT_HOMEPAGE.promos,
     banners: content.heroSlides?.length ? content.heroSlides : DEFAULT_HOMEPAGE.heroSlides,
+    store,
     source: 'mongodb',
   };
 }

@@ -9,6 +9,17 @@ const imageSchema = new mongoose.Schema(
   { _id: false },
 );
 
+const variantSchema = new mongoose.Schema(
+  {
+    size: { type: String, trim: true, default: '' },
+    colour: { type: String, trim: true, default: '' },
+    price: { type: Number, min: [0, 'Variant price cannot be negative.'] },
+    stock: { type: Number, min: [0, 'Variant stock cannot be negative.'], default: undefined },
+    image: { type: String, trim: true, default: '' },
+  },
+  { _id: false },
+);
+
 const productSchema = new mongoose.Schema(
   {
     name: {
@@ -65,11 +76,15 @@ const productSchema = new mongoose.Schema(
       },
     },
     sizes: {
-      type: [String],
+      type: [mongoose.Schema.Types.Mixed],
       default: [],
     },
     colours: {
-      type: [String],
+      type: [mongoose.Schema.Types.Mixed],
+      default: [],
+    },
+    variants: {
+      type: [variantSchema],
       default: [],
     },
     stock: {

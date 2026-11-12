@@ -1,31 +1,8 @@
-import { useState } from 'react';
-import { readError, sendEnquiry } from '../services/api';
-
-const initial = { name: '', email: '', phone: '', message: '' };
+import { Link } from 'react-router-dom';
+import { useShop } from '../context/ShopContext';
 
 export default function ContactPage() {
-  const [form, setForm] = useState(initial);
-  const [note, setNote] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  function update(event) {
-    setForm((current) => ({ ...current, [event.target.name]: event.target.value }));
-  }
-
-  async function onSubmit(event) {
-    event.preventDefault();
-    setBusy(true);
-    setNote('');
-    try {
-      const data = await sendEnquiry(form);
-      setNote(data.message);
-      setForm(initial);
-    } catch (error) {
-      setNote(readError(error, 'The message could not be sent. Please try again.'));
-    } finally {
-      setBusy(false);
-    }
-  }
+  const { setCartOpen, store } = useShop();
 
   return (
     <article className="plain-page">
@@ -33,34 +10,29 @@ export default function ContactPage() {
         <p className="eyebrow">Contact</p>
         <h1>Contact Us</h1>
         <p>
-          Send a note to the shop. A public phone number, email address and WhatsApp line will be shown here once they are provided.
+          Surprise Fashion Sphere takes orders on WhatsApp. Add pieces to your bag, then use
+          Proceed to Order on WhatsApp so the shop can confirm availability and share payment and
+          delivery instructions.
         </p>
-        <form className="contact-form" onSubmit={onSubmit}>
-          <label>
-            Name
-            <input name="name" value={form.name} onChange={update} required minLength={2} maxLength={80} />
-          </label>
-          <label>
-            Email
-            <input name="email" type="email" value={form.email} onChange={update} required />
-          </label>
-          <label>
-            Phone <span>(optional)</span>
-            <input name="phone" value={form.phone} onChange={update} maxLength={30} />
-          </label>
-          <label>
-            Message
-            <textarea name="message" value={form.message} onChange={update} required minLength={10} maxLength={1000} rows={5} />
-          </label>
-          <button type="submit" className="button button-wine" disabled={busy}>
-            {busy ? 'Sending…' : 'Send message'}
-          </button>
-        </form>
-        {note && (
-          <p className="form-note" role="status">
-            {note}
+        <p>
+          This website does not process payments and does not use an email contact form.
+        </p>
+        {store?.whatsappConfigured ? (
+          <p>The WhatsApp order button in your bag opens a pre-filled message to the store.</p>
+        ) : (
+          <p>
+            The shop WhatsApp number is not published yet. Once it is set in Admin, the bag order
+            button will open WhatsApp automatically.
           </p>
         )}
+        <div className="contact-actions">
+          <button type="button" className="button button-wine" onClick={() => setCartOpen(true)}>
+            Open your bag
+          </button>
+          <Link className="button button-cream" to="/shop">
+            Continue shopping
+          </Link>
+        </div>
       </div>
     </article>
   );

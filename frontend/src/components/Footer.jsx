@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { readError, subscribeNewsletter } from '../services/api';
-import SocialLinks from './SocialLinks';
 
 export default function Footer() {
   const [email, setEmail] = useState('');
@@ -29,7 +28,7 @@ export default function Footer() {
         <div className="footer-brand">
           <img src="/images/logo.jpg" alt="Surprise Fashion Sphere" />
           <p>Your beauty is our priority.</p>
-          <SocialLinks className="social-links social-links-footer" />
+          <p className="footer-order-note">Orders are confirmed on WhatsApp from your bag.</p>
         </div>
 
         <div>
@@ -82,6 +81,9 @@ export default function Footer() {
         <div className="container fine-print-inner">
           <p>© {new Date().getFullYear()} Surprise Fashion Sphere. All rights reserved.</p>
           <p>Thanks for your patronage. We love you.</p>
+          <p className="footer-admin">
+            <Link to="/admin">Admin</Link>
+          </p>
         </div>
       </div>
     </footer>

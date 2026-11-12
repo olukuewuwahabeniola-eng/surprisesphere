@@ -14,7 +14,7 @@ export const HOMEPAGE_CURATED_COUNT = 5;
 export const DEFAULT_PAGE_SIZE = 24;
 
 /** Max items returned in one API response. Not a store-wide maximum. */
-export const MAX_PAGE_SIZE = 48;
+export const MAX_PAGE_SIZE = 100;
 
 export const categoryDefinitions = [
   {
@@ -148,8 +148,15 @@ const products = [
     featured: false,
     active: true,
     listedAt: '2026-09-22',
-    sizes: [],
-    colours: [],
+    sizes: ['37', '38', '39', '40', '41'],
+    colours: ['Grey'],
+    variants: [
+      { size: '37', colour: 'Grey', price: 15000 },
+      { size: '38', colour: 'Grey', price: 15000 },
+      { size: '39', colour: 'Grey', price: 15000 },
+      { size: '40', colour: 'Grey', price: 15500 },
+      { size: '41', colour: 'Grey', price: 15500 },
+    ],
   },
   {
     id: 'soft-beret',
@@ -165,8 +172,13 @@ const products = [
     featured: false,
     active: true,
     listedAt: '2026-09-28',
-    sizes: [],
-    colours: [],
+    sizes: ['One Size'],
+    colours: ['Black', 'Brown', 'Cream'],
+    variants: [
+      { size: 'One Size', colour: 'Black', price: 6000 },
+      { size: 'One Size', colour: 'Brown', price: 6500 },
+      { size: 'One Size', colour: 'Cream', price: 6500 },
+    ],
   },
   {
     id: 'turban-cap',
@@ -233,8 +245,14 @@ const products = [
     featured: true,
     active: true,
     listedAt: '2026-10-28',
-    sizes: [],
-    colours: [],
+    sizes: ['37', '38', '39', '40'],
+    colours: ['Tan'],
+    variants: [
+      { size: '37', colour: 'Tan', price: 28000 },
+      { size: '38', colour: 'Tan', price: 28000 },
+      { size: '39', colour: 'Tan', price: 28500 },
+      { size: '40', colour: 'Tan', price: 28500 },
+    ],
   },
   {
     id: 'mini-bag',
@@ -272,7 +290,27 @@ const products = [
   },
 ];
 
+function optionLabel(entry) {
+  if (entry == null) {
+    return '';
+  }
+  if (typeof entry === 'string' || typeof entry === 'number') {
+    return String(entry).trim();
+  }
+  return String(entry.label || entry.name || entry.value || entry.size || entry.colour || '').trim();
+}
+
 function publicProduct(product) {
+  const variants = Array.isArray(product.variants) ? product.variants : [];
+  const sizeLabels = [
+    ...(product.sizes || []).map(optionLabel),
+    ...variants.map((variant) => optionLabel(variant.size)),
+  ].filter(Boolean);
+  const colourLabels = [
+    ...(product.colours || []).map(optionLabel),
+    ...variants.map((variant) => optionLabel(variant.colour || variant.color)),
+  ].filter(Boolean);
+
   return {
     id: product.id,
     name: product.name,
@@ -287,8 +325,11 @@ function publicProduct(product) {
     featured: Boolean(product.featured),
     active: product.active !== false,
     listedAt: product.listedAt,
-    sizes: product.sizes,
-    colours: product.colours,
+    sizes: [...new Set(sizeLabels)],
+    colours: [...new Set(colourLabels)],
+    sizeOptions: product.sizes || [],
+    colourOptions: product.colours || [],
+    variants,
   };
 }
 
@@ -407,16 +448,24 @@ function applyFilters(items, query = {}) {
 
   if (query.size) {
     const size = String(query.size).toLowerCase();
-    next = next.filter((product) =>
-      product.sizes.some((entry) => String(entry).toLowerCase() === size),
-    );
+    next = next.filter((product) => {
+      const labels = [
+        ...(product.sizes || []).map(optionLabel),
+        ...(product.variants || []).map((variant) => optionLabel(variant.size)),
+      ];
+      return labels.some((entry) => entry.toLowerCase() === size);
+    });
   }
 
   if (query.colour) {
     const colour = String(query.colour).toLowerCase();
-    next = next.filter((product) =>
-      product.colours.some((entry) => String(entry).toLowerCase() === colour),
-    );
+    next = next.filter((product) => {
+      const labels = [
+        ...(product.colours || []).map(optionLabel),
+        ...(product.variants || []).map((variant) => optionLabel(variant.colour || variant.color)),
+      ];
+      return labels.some((entry) => entry.toLowerCase() === colour);
+    });
   }
 
   switch (sortKey) {
@@ -544,8 +593,8 @@ export function getHomepageCatalog() {
     heroSlides: [
       {
         id: 'step-out',
-        title: 'Step Out\nin Style',
-        subtitle: 'Quality, Affordable Bags, Shoes, Headwear & More',
+        title: 'BEAUTY,\nREIMAGINED.',
+        subtitle: 'A considered edit of bags, footwear, headwear and more—styled for the woman who arrives with intention.',
         cta: 'Shop Now',
         href: '/best-sellers',
         image: '/images/hero-1.jpg',
@@ -553,27 +602,27 @@ export function getHomepageCatalog() {
       },
       {
         id: 'bags',
-        title: 'Carry it\nwith you',
-        subtitle: 'Handbags, totes and small bags for the day and the evening',
-        cta: 'Shop Bags',
+        title: 'THE PERFECT\nFINISH.',
+        subtitle: 'Handbags that complete every look—quiet luxury for day, soft drama for evening.',
+        cta: 'Shop Now',
         href: '/shop/bags',
         image: '/images/prod-handbag.jpg',
         alt: 'Warm orange woven handbag with a top handle',
       },
       {
         id: 'shoes',
-        title: 'Shoes that\nkeep up',
-        subtitle: 'Heels, slides and everyday pairs for work, owambe and weekends',
-        cta: 'Shop Footwear',
+        title: 'STEP OUT.\nSTAND APART.',
+        subtitle: 'Heels, slides and everyday pairs made for work, owambe and the weekend in between.',
+        cta: 'Shop Now',
         href: '/shop/shoes',
         image: '/images/cat-shoes.jpg',
         alt: 'Floral pointed-toe heels on a pale blue set',
       },
       {
         id: 'clothing',
-        title: 'Dress for\nthe moment',
-        subtitle: 'Clothing and accessories, alongside bags, shoes and headwear',
-        cta: 'View the Edit',
+        title: 'MAKE EVERY\nENTRANCE\nUNFORGETTABLE.',
+        subtitle: 'Dresses and occasion pieces designed to hold the room—and the moment.',
+        cta: 'Shop Now',
         href: '/shop/clothing',
         image: '/images/prod-dress.jpg',
         alt: 'Woman in a red gown standing outdoors',

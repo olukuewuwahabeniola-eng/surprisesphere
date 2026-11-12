@@ -17,7 +17,8 @@ const loaders = {
   shop: getShop,
 };
 
-const PAGE_SIZE = 24;
+const PAGE_SIZE = 48;
+const COLLECTION_MODES = new Set(['best-sellers', 'new-arrivals']);
 
 export default function ProductListingPage({ mode }) {
   const { slug } = useParams();
@@ -30,21 +31,31 @@ export default function ProductListingPage({ mode }) {
   const [categories, setCategories] = useState([]);
   const [loadingMore, setLoadingMore] = useState(false);
 
+  const isCollectionView = COLLECTION_MODES.has(mode);
   const queryKey = searchParams.toString();
   const filterQuery = useMemo(() => {
     const params = new URLSearchParams(queryKey);
     const next = {
-      sort: params.get('sort') || 'newest',
       pageSize: PAGE_SIZE,
     };
-    ['category', 'minPrice', 'maxPrice', 'size', 'colour'].forEach((key) => {
-      const value = params.get(key);
-      if (value) {
-        next[key] = value;
-      }
-    });
+
+    if (!isCollectionView) {
+      next.sort = params.get('sort') || 'newest';
+      ['minPrice', 'maxPrice', 'size', 'colour'].forEach((key) => {
+        const value = params.get(key);
+        if (value) {
+          next[key] = value;
+        }
+      });
+    }
+
+    const category = params.get('category');
+    if (category) {
+      next.category = category;
+    }
+
     return next;
-  }, [queryKey]);
+  }, [queryKey, isCollectionView]);
 
   useEffect(() => {
     let alive = true;
@@ -143,8 +154,10 @@ export default function ProductListingPage({ mode }) {
   return (
     <div className="listing-page">
       <div className="container">
-        <p className="eyebrow">Shop</p>
-        <div className="listing-head">
+        <p className="eyebrow" data-reveal>
+          Shop
+        </p>
+        <div className="listing-head" data-reveal>
           <div>
             <h1>{payload?.title}</h1>
             <p>{payload?.description}</p>
@@ -157,6 +170,9 @@ export default function ProductListingPage({ mode }) {
         <ListingFilters
           categories={categories.filter((category) => !category.isGroup)}
           showCategoryFilter={showCategoryFilter}
+          showPriceFilters={!isCollectionView}
+          showSort={!isCollectionView}
+          showSizeColourFilters={!isCollectionView}
           resultCount={total}
           shownCount={shown}
         />
@@ -175,8 +191,8 @@ export default function ProductListingPage({ mode }) {
         ) : (
           <>
             <div className="product-grid">
-              {products.map((product) => (
-                <ProductCard key={product.id} product={product} />
+              {products.map((product, index) => (
+                <ProductCard key={product.id} product={product} index={index} />
               ))}
             </div>
 
