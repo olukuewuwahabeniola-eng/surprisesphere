@@ -105,5 +105,14 @@ export function buildAdminReviewFilters(query = {}) {
     filters.status = status;
   }
 
+  const search = String(query.q || query.search || '').trim();
+  if (search) {
+    const escaped = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    filters.$or = [
+      { displayName: { $regex: escaped, $options: 'i' } },
+      { body: { $regex: escaped, $options: 'i' } },
+    ];
+  }
+
   return filters;
 }

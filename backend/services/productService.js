@@ -12,6 +12,7 @@ import { mapProduct } from '../utils/productMapper.js';
 import { assertObjectId, parseProductQuery } from '../utils/queryParsers.js';
 import { requireDb } from '../utils/requireDb.js';
 import { uniqueSlug } from '../utils/slugify.js';
+import { attachRatingsToProducts } from './reviewService.js';
 
 const FOOTWEAR_SLUGS = ['shoes', 'sneakers', 'slides', 'heels'];
 
@@ -66,8 +67,10 @@ export async function listProducts(rawQuery = {}, extraFilters = {}) {
       .lean(),
   ]);
 
+  const products = await attachRatingsToProducts(docs.map(mapProduct));
+
   return {
-    products: docs.map(mapProduct),
+    products,
     pagination: buildPagination({ page, pageSize, total }),
     filters: {
       ...rawQuery,
@@ -147,8 +150,10 @@ export async function getProductByIdOrSlug(idOrSlug) {
     throw new AppError('That product was not found.', 404);
   }
 
+  const [product] = await attachRatingsToProducts([mapProduct(doc)]);
+
   return {
-    product: mapProduct(doc),
+    product,
     source: 'mongodb',
   };
 }
@@ -166,7 +171,7 @@ export async function getCuratedProducts({ bestSeller, newArrival, featured, lim
     .limit(limit)
     .lean();
 
-  return docs.map(mapProduct);
+  return attachRatingsToProducts(docs.map(mapProduct));
 }
 
 export async function validateProductDocument(payload) {
@@ -319,6 +324,18 @@ export async function createProduct(rawBody = {}) {
   });
 
   const populated = await Product.findById(product._id).populate('category', 'name slug active').lean();
+
+  try {
+    const { recordStoreActivity } = await import('./analyticsService.js');
+    await recordStoreActivity({
+      type: 'product_created',
+      productId: product._id,
+      productName: product.name,
+      path: '/admin/products',
+    });
+  } catch {
+    // Activity logging must not block product creation.
+  }
 
   return {
     product: mapProduct(populated),

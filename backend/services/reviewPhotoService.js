@@ -93,7 +93,7 @@ export async function listAdminReviewPhotos(query = {}) {
   }
 
   const { page, pageSize, skip } = readPagination(query);
-  const [total, docs] = await Promise.all([
+  const [total, docs, publishedCount, unpublishedCount] = await Promise.all([
     ReviewPhoto.countDocuments(filters),
     ReviewPhoto.find(filters)
       .populate('product', 'name slug')
@@ -101,11 +101,18 @@ export async function listAdminReviewPhotos(query = {}) {
       .skip(skip)
       .limit(pageSize)
       .lean(),
+    ReviewPhoto.countDocuments({ published: true }),
+    ReviewPhoto.countDocuments({ published: false }),
   ]);
 
   return {
     photos: docs.map(mapAdminReviewPhoto),
     pagination: buildPagination({ page, pageSize, total }),
+    counts: {
+      total: publishedCount + unpublishedCount,
+      published: publishedCount,
+      unpublished: unpublishedCount,
+    },
   };
 }
 
@@ -189,7 +196,22 @@ export async function updateAdminReviewPhoto(id, body = {}) {
 }
 
 export async function publishAdminReviewPhoto(id) {
-  return updateAdminReviewPhoto(id, { published: true });
+  const result = await updateAdminReviewPhoto(id, { published: true });
+
+  try {
+    const { recordStoreActivity } = await import('./analyticsService.js');
+    await recordStoreActivity({
+      type: 'testimonial_published',
+      productId: result.photo?.productId || undefined,
+      productName: result.photo?.caption || 'WhatsApp picture review',
+      path: '/admin/reviews',
+      meta: { photoId: result.photo?.id },
+    });
+  } catch {
+    // Activity logging must not block publishing.
+  }
+
+  return result;
 }
 
 export async function unpublishAdminReviewPhoto(id) {

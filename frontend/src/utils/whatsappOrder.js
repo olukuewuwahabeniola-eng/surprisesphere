@@ -56,3 +56,12 @@ export function buildWhatsAppOrderUrl(whatsappNumber, cart, grandTotal) {
   const text = buildWhatsAppOrderMessage(cart, grandTotal);
   return `https://wa.me/${digits}?text=${encodeURIComponent(text)}`;
 }
+
+export function buildWhatsAppProductOrderUrl(whatsappNumber, productLine) {
+  if (!productLine) {
+    return '';
+  }
+  const cart = [productLine];
+  const total = lineSubtotal(productLine);
+  return buildWhatsAppOrderUrl(whatsappNumber, cart, total);
+}

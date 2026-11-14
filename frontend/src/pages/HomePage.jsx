@@ -1,14 +1,17 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import CategoryRow from '../components/CategoryRow';
 import Hero from '../components/Hero';
 import PromoBanners from '../components/PromoBanners';
 import ProductSection from '../components/ProductSection';
+import TestimonialGallery from '../components/TestimonialGallery';
 import { useShop } from '../context/ShopContext';
+import { getReviewPhotos } from '../services/api';
 
 export default function HomePage() {
   const { catalog, status, catalogError, loadCatalog } = useShop();
   const location = useLocation();
+  const [testimonials, setTestimonials] = useState([]);
 
   useEffect(() => {
     if (status !== 'ready' || !location.hash) {
@@ -19,6 +22,27 @@ export default function HomePage() {
       target.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   }, [status, location.hash]);
+
+  useEffect(() => {
+    if (status !== 'ready') {
+      return undefined;
+    }
+    let cancelled = false;
+    getReviewPhotos({ placement: 'homepage', pageSize: 12 })
+      .then((data) => {
+        if (!cancelled) {
+          setTestimonials(data.photos || []);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setTestimonials([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [status]);
 
   if (status === 'loading') {
     return (
@@ -65,6 +89,11 @@ export default function HomePage() {
         title="New Arrivals"
         products={catalog.newArrivals}
         viewAllTo="/new-arrivals"
+      />
+      <TestimonialGallery
+        photos={testimonials}
+        title="Loved by Our Customers"
+        eyebrow="WhatsApp moments"
       />
       <PromoBanners promos={catalog.promos} />
     </>

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useShop } from '../context/ShopContext';
 import { useBodyLock } from '../hooks/useBodyLock';
+import { trackWhatsAppEnquiry } from '../utils/analytics';
 import { formatNaira } from '../utils/money';
 import { buildWhatsAppOrderUrl, cartLineKey, lineSubtotal } from '../utils/whatsappOrder';
 
@@ -117,6 +118,20 @@ export default function Drawers() {
                   href={orderUrl}
                   target="_blank"
                   rel="noreferrer"
+                  onClick={() => {
+                    trackWhatsAppEnquiry({
+                      channel: 'cart',
+                      items: cart.map((item) => ({
+                        productId: item.id,
+                        name: item.name,
+                        size: item.size,
+                        colour: item.colour,
+                        price: item.price,
+                        qty: item.qty,
+                        image: item.image,
+                      })),
+                    });
+                  }}
                 >
                   Proceed to Order on WhatsApp
                 </a>

@@ -48,6 +48,20 @@ export function getProduct(idOrSlug) {
   return api.get(`/api/products/${idOrSlug}`).then((response) => response.data);
 }
 
+export function getProductReviews(idOrSlug, params = {}) {
+  return api
+    .get(`/api/products/${idOrSlug}/reviews`, { params })
+    .then((response) => response.data);
+}
+
+export function submitProductReview(payload) {
+  return api.post('/api/reviews', payload).then((response) => response.data);
+}
+
+export function getReviewPhotos(params = {}) {
+  return api.get('/api/review-photos', { params }).then((response) => response.data);
+}
+
 export function getProducts(params = {}) {
   return api.get('/api/products', { params }).then((response) => response.data);
 }
@@ -123,6 +137,42 @@ export function listAdminCategories(adminKey, params = {}) {
       params,
       headers: adminHeaders(adminKey),
     })
+    .then((response) => response.data);
+}
+
+export function createAdminCategory(adminKey, payload) {
+  return api
+    .post('/api/admin/categories', payload, {
+      headers: adminHeaders(adminKey),
+    })
+    .then((response) => response.data);
+}
+
+export function updateAdminCategory(adminKey, idOrSlug, payload) {
+  return api
+    .patch(`/api/admin/categories/${idOrSlug}`, payload, {
+      headers: adminHeaders(adminKey),
+    })
+    .then((response) => response.data);
+}
+
+export function deleteAdminCategory(adminKey, idOrSlug) {
+  return api
+    .delete(`/api/admin/categories/${idOrSlug}`, {
+      headers: adminHeaders(adminKey),
+    })
+    .then((response) => response.data);
+}
+
+export function reorderAdminCategories(adminKey, orderedIds) {
+  return api
+    .patch(
+      '/api/admin/categories/reorder',
+      { ids: orderedIds },
+      {
+        headers: adminHeaders(adminKey),
+      },
+    )
     .then((response) => response.data);
 }
 
@@ -282,6 +332,40 @@ export function reorderAdminReviewPhotos(adminKey, orderedIds) {
 export function deleteAdminReviewPhoto(adminKey, id) {
   return api
     .delete(`/api/admin/review-photos/${id}`, {
+      headers: adminHeaders(adminKey),
+    })
+    .then((response) => response.data);
+}
+
+export function trackAnalyticsEvent(payload) {
+  return api.post('/api/analytics/events', payload).then((response) => response.data);
+}
+
+export function recordWhatsAppOrderEnquiry(payload) {
+  return api.post('/api/analytics/whatsapp-orders', payload).then((response) => response.data);
+}
+
+export function getAdminDashboard(adminKey, params = {}) {
+  return api
+    .get('/api/admin/analytics/dashboard', {
+      params,
+      headers: adminHeaders(adminKey),
+    })
+    .then((response) => response.data);
+}
+
+export function listAdminOrders(adminKey, params = {}) {
+  return api
+    .get('/api/admin/analytics/orders', {
+      params,
+      headers: adminHeaders(adminKey),
+    })
+    .then((response) => response.data);
+}
+
+export function updateAdminOrder(adminKey, id, payload) {
+  return api
+    .patch(`/api/admin/analytics/orders/${id}`, payload, {
       headers: adminHeaders(adminKey),
     })
     .then((response) => response.data);

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useOutletContext } from 'react-router-dom';
 import {
   approveAdminReview,
   blockAdminReview,
@@ -18,12 +18,12 @@ import {
   updateAdminReviewPhoto,
   uploadAdminReviewPhotos,
 } from '../services/api';
-import { getStoredAdminKey, setStoredAdminKey } from '../utils/adminAuth';
+import { getStoredAdminKey } from '../utils/adminAuth';
 
 const PAGE_SIZE = 12;
 
 const STATUS_OPTIONS = [
-  { value: '', label: 'All statuses' },
+  { value: '', label: 'All reviews' },
   { value: 'pending', label: 'Pending' },
   { value: 'approved', label: 'Approved' },
   { value: 'rejected', label: 'Rejected' },
@@ -31,23 +31,10 @@ const STATUS_OPTIONS = [
   { value: 'unpublished', label: 'Unpublished' },
 ];
 
-const RATING_OPTIONS = [
-  { value: '', label: 'All ratings' },
-  { value: '5', label: '5 stars' },
-  { value: '4', label: '4 stars' },
-  { value: '3', label: '3 stars' },
-  { value: '2', label: '2 stars' },
-  { value: '1', label: '1 star' },
-];
-
 function formatDate(value) {
-  if (!value) {
-    return '—';
-  }
+  if (!value) return '—';
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return '—';
-  }
+  if (Number.isNaN(date.getTime())) return '—';
   return date.toLocaleString(undefined, {
     day: 'numeric',
     month: 'short',
@@ -84,28 +71,35 @@ function reviewActionsFor(status) {
 }
 
 export default function AdminReviewsPage() {
-  const [adminKey, setAdminKey] = useState(() => getStoredAdminKey());
-  const [keyDraft, setKeyDraft] = useState(() => getStoredAdminKey());
-  const [authorized, setAuthorized] = useState(Boolean(getStoredAdminKey()));
-  const [tab, setTab] = useState('ratings');
+  const outlet = useOutletContext() || {};
+  const adminKey = outlet.adminKey || getStoredAdminKey();
 
+  const [tab, setTab] = useState('ratings');
   const [products, setProducts] = useState([]);
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
-  // Customer ratings tab
   const [reviews, setReviews] = useState([]);
+  const [reviewCounts, setReviewCounts] = useState({
+    total: 0,
+    pending: 0,
+    approved: 0,
+    rejected: 0,
+    blocked: 0,
+    unpublished: 0,
+  });
   const [reviewPagination, setReviewPagination] = useState(null);
   const [reviewStatus, setReviewStatus] = useState('idle');
   const [productFilter, setProductFilter] = useState('');
-  const [ratingFilter, setRatingFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState('pending');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch] = useState('');
   const [reviewPage, setReviewPage] = useState(1);
   const [inspectId, setInspectId] = useState('');
 
-  // WhatsApp photos tab
   const [photos, setPhotos] = useState([]);
+  const [photoCounts, setPhotoCounts] = useState({ total: 0, published: 0, unpublished: 0 });
   const [photoPagination, setPhotoPagination] = useState(null);
   const [photoStatus, setPhotoStatus] = useState('idle');
   const [photoPage, setPhotoPage] = useState(1);
@@ -123,8 +117,7 @@ export default function AdminReviewsPage() {
   const [editingCaptions, setEditingCaptions] = useState({});
 
   const productOptions = useMemo(
-    () =>
-      [...products].sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))),
+    () => [...products].sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))),
     [products],
   );
 
@@ -140,27 +133,16 @@ export default function AdminReviewsPage() {
 
   const loadReviews = useCallback(async () => {
     if (!adminKey) {
-      setAuthorized(false);
       setReviewStatus('idle');
       return;
     }
-
     setReviewStatus('loading');
     setError('');
     try {
-      const params = {
-        page: reviewPage,
-        pageSize: PAGE_SIZE,
-      };
-      if (productFilter) {
-        params.product = productFilter;
-      }
-      if (ratingFilter) {
-        params.rating = ratingFilter;
-      }
-      if (statusFilter) {
-        params.status = statusFilter;
-      }
+      const params = { page: reviewPage, pageSize: PAGE_SIZE };
+      if (productFilter) params.product = productFilter;
+      if (statusFilter) params.status = statusFilter;
+      if (search) params.q = search;
 
       const [reviewData] = await Promise.all([
         listAdminReviews(adminKey, params),
@@ -169,39 +151,28 @@ export default function AdminReviewsPage() {
 
       setReviews(reviewData.reviews || []);
       setReviewPagination(reviewData.pagination || null);
-      setAuthorized(true);
+      if (reviewData.counts) {
+        setReviewCounts(reviewData.counts);
+      }
       setReviewStatus('ready');
     } catch (err) {
       setError(readError(err, 'Could not load customer reviews.'));
       setReviewStatus('error');
-      if (err?.response?.status === 401) {
-        setAuthorized(false);
-      }
     }
-  }, [adminKey, reviewPage, productFilter, ratingFilter, statusFilter, loadProducts]);
+  }, [adminKey, reviewPage, productFilter, statusFilter, search, loadProducts]);
 
   const loadPhotos = useCallback(async () => {
     if (!adminKey) {
-      setAuthorized(false);
       setPhotoStatus('idle');
       return;
     }
-
     setPhotoStatus('loading');
     setError('');
     try {
-      const params = {
-        page: photoPage,
-        pageSize: PAGE_SIZE,
-      };
-      if (photoPlacementFilter) {
-        params.placement = photoPlacementFilter;
-      }
-      if (photoPublishedFilter === 'published') {
-        params.published = true;
-      } else if (photoPublishedFilter === 'unpublished') {
-        params.published = false;
-      }
+      const params = { page: photoPage, pageSize: PAGE_SIZE };
+      if (photoPlacementFilter) params.placement = photoPlacementFilter;
+      if (photoPublishedFilter === 'published') params.published = true;
+      if (photoPublishedFilter === 'unpublished') params.published = false;
 
       const [photoData] = await Promise.all([
         listAdminReviewPhotos(adminKey, params),
@@ -210,31 +181,44 @@ export default function AdminReviewsPage() {
 
       setPhotos(photoData.photos || []);
       setPhotoPagination(photoData.pagination || null);
+      if (photoData.counts) {
+        setPhotoCounts(photoData.counts);
+      }
       setEditingCaptions(
         Object.fromEntries((photoData.photos || []).map((photo) => [photo.id, photo.caption || ''])),
       );
-      setAuthorized(true);
       setPhotoStatus('ready');
     } catch (err) {
       setError(readError(err, 'Could not load WhatsApp picture reviews.'));
       setPhotoStatus('error');
-      if (err?.response?.status === 401) {
-        setAuthorized(false);
-      }
     }
   }, [adminKey, photoPage, photoPlacementFilter, photoPublishedFilter, loadProducts]);
 
-  useEffect(() => {
-    if (tab === 'ratings') {
-      loadReviews();
+  const refreshSummary = useCallback(async () => {
+    if (!adminKey) return;
+    try {
+      const [reviewsSummary, photosSummary] = await Promise.all([
+        listAdminReviews(adminKey, { page: 1, pageSize: 1 }),
+        listAdminReviewPhotos(adminKey, { page: 1, pageSize: 1 }),
+      ]);
+      if (reviewsSummary.counts) setReviewCounts(reviewsSummary.counts);
+      if (photosSummary.counts) setPhotoCounts(photosSummary.counts);
+    } catch {
+      // Keep prior summary cards if refresh fails.
     }
+  }, [adminKey]);
+
+  useEffect(() => {
+    if (tab === 'ratings') loadReviews();
   }, [tab, loadReviews]);
 
   useEffect(() => {
-    if (tab === 'photos') {
-      loadPhotos();
-    }
+    if (tab === 'photos') loadPhotos();
   }, [tab, loadPhotos]);
+
+  useEffect(() => {
+    refreshSummary();
+  }, [refreshSummary]);
 
   useEffect(
     () => () => {
@@ -243,25 +227,18 @@ export default function AdminReviewsPage() {
     [localPreviews],
   );
 
-  function unlockAdmin(event) {
-    event.preventDefault();
-    const nextKey = String(keyDraft || '').trim();
-    setStoredAdminKey(nextKey);
-    setAdminKey(nextKey);
-    setReviewPage(1);
-    setPhotoPage(1);
-    setNote('');
-    setError('');
-  }
-
   async function runReviewAction(review, action) {
     if (action === 'delete') {
       const confirmed = window.confirm(
         `Permanently delete the review from ${review.displayName}? This cannot be undone.`,
       );
-      if (!confirmed) {
-        return;
-      }
+      if (!confirmed) return;
+    }
+    if (action === 'unpublish') {
+      const confirmed = window.confirm(
+        'Unpublish this approved review? It will leave the public product page and stop counting toward the average rating.',
+      );
+      if (!confirmed) return;
     }
 
     setBusy(true);
@@ -269,24 +246,16 @@ export default function AdminReviewsPage() {
     setNote('');
     try {
       let result;
-      if (action === 'approve') {
-        result = await approveAdminReview(adminKey, review.id);
-      } else if (action === 'reject') {
-        result = await rejectAdminReview(adminKey, review.id);
-      } else if (action === 'block') {
-        result = await blockAdminReview(adminKey, review.id);
-      } else if (action === 'unpublish') {
-        result = await unpublishAdminReview(adminKey, review.id);
-      } else if (action === 'restore') {
-        result = await restoreAdminReview(adminKey, review.id);
-      } else if (action === 'delete') {
-        result = await deleteAdminReview(adminKey, review.id);
-      }
+      if (action === 'approve') result = await approveAdminReview(adminKey, review.id);
+      else if (action === 'reject') result = await rejectAdminReview(adminKey, review.id);
+      else if (action === 'block') result = await blockAdminReview(adminKey, review.id);
+      else if (action === 'unpublish') result = await unpublishAdminReview(adminKey, review.id);
+      else if (action === 'restore') result = await restoreAdminReview(adminKey, review.id);
+      else if (action === 'delete') result = await deleteAdminReview(adminKey, review.id);
+
       setNote(result?.message || 'Review updated.');
-      if (inspectId === review.id && action === 'delete') {
-        setInspectId('');
-      }
-      await loadReviews();
+      if (inspectId === review.id && action === 'delete') setInspectId('');
+      await Promise.all([loadReviews(), refreshSummary()]);
     } catch (err) {
       setError(readError(err, 'Could not update that review.'));
     } finally {
@@ -307,9 +276,14 @@ export default function AdminReviewsPage() {
     setSelectedFiles([]);
     setLocalPreviews([]);
     setUploadProgress(0);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }
+
+  function removePreview(index) {
+    const nextFiles = selectedFiles.filter((_, i) => i !== index);
+    URL.revokeObjectURL(localPreviews[index]);
+    setSelectedFiles(nextFiles);
+    setLocalPreviews(nextFiles.map((file) => URL.createObjectURL(file)));
   }
 
   async function handlePhotoUpload(event) {
@@ -318,7 +292,6 @@ export default function AdminReviewsPage() {
       setError('Choose one or more WhatsApp review screenshots to upload.');
       return;
     }
-
     setUploading(true);
     setBusy(true);
     setError('');
@@ -336,9 +309,7 @@ export default function AdminReviewsPage() {
         },
         {
           onUploadProgress: (progressEvent) => {
-            if (!progressEvent.total) {
-              return;
-            }
+            if (!progressEvent.total) return;
             setUploadProgress(Math.round((progressEvent.loaded / progressEvent.total) * 100));
           },
         },
@@ -346,7 +317,7 @@ export default function AdminReviewsPage() {
       setNote(result.message || 'Review pictures uploaded.');
       setUploadCaption('');
       clearSelectedFiles();
-      await loadPhotos();
+      await Promise.all([loadPhotos(), refreshSummary()]);
     } catch (err) {
       setError(readError(err, 'Could not upload review pictures.'));
     } finally {
@@ -358,25 +329,18 @@ export default function AdminReviewsPage() {
   async function handlePhotoAction(photo, action) {
     if (action === 'delete') {
       const confirmed = window.confirm('Delete this WhatsApp review picture permanently?');
-      if (!confirmed) {
-        return;
-      }
+      if (!confirmed) return;
     }
-
     setBusy(true);
     setError('');
     setNote('');
     try {
       let result;
-      if (action === 'publish') {
-        result = await publishAdminReviewPhoto(adminKey, photo.id);
-      } else if (action === 'unpublish') {
-        result = await unpublishAdminReviewPhoto(adminKey, photo.id);
-      } else if (action === 'delete') {
-        result = await deleteAdminReviewPhoto(adminKey, photo.id);
-      }
+      if (action === 'publish') result = await publishAdminReviewPhoto(adminKey, photo.id);
+      else if (action === 'unpublish') result = await unpublishAdminReviewPhoto(adminKey, photo.id);
+      else if (action === 'delete') result = await deleteAdminReviewPhoto(adminKey, photo.id);
       setNote(result?.message || 'Testimonial updated.');
-      await loadPhotos();
+      await Promise.all([loadPhotos(), refreshSummary()]);
     } catch (err) {
       setError(readError(err, 'Could not update that testimonial.'));
     } finally {
@@ -405,13 +369,9 @@ export default function AdminReviewsPage() {
 
   async function movePhoto(photo, direction) {
     const index = photos.findIndex((entry) => entry.id === photo.id);
-    if (index < 0) {
-      return;
-    }
+    if (index < 0) return;
     const target = direction === 'up' ? index - 1 : index + 1;
-    if (target < 0 || target >= photos.length) {
-      return;
-    }
+    if (target < 0 || target >= photos.length) return;
 
     const orderedIds = photos.map((entry) => entry.id);
     const [moved] = orderedIds.splice(index, 1);
@@ -447,668 +407,550 @@ export default function AdminReviewsPage() {
     }
   }
 
-  const inspected = reviews.find((review) => review.id === inspectId) || null;
+  function applySearch(event) {
+    event.preventDefault();
+    setReviewPage(1);
+    setSearch(String(searchInput || '').trim());
+  }
+
+  const summaryCards = [
+    { label: 'Total customer reviews', value: reviewCounts.total, tone: 'wine' },
+    { label: 'Pending reviews', value: reviewCounts.pending, tone: 'terra' },
+    { label: 'Approved reviews', value: reviewCounts.approved, tone: 'green' },
+    { label: 'Published WhatsApp testimonials', value: photoCounts.published, tone: 'wine' },
+  ];
 
   return (
-    <article className="plain-page admin-page admin-reviews-page">
-      <div className="container">
-        <div className="admin-products-head">
-          <div>
-            <p className="eyebrow">Admin</p>
-            <h1>Reviews &amp; Testimonials</h1>
-            <p>
-              Moderate customer star ratings and manage WhatsApp review screenshots for Surprise
-              Fashion Sphere.
-            </p>
-          </div>
-          <div className="admin-products-nav">
-            <Link className="text-button" to="/admin">
-              ← Store settings
-            </Link>
-            <Link className="text-button" to="/admin/products">
-              Products
-            </Link>
-          </div>
+    <div className="admin-dashboard admin-dashboard-motion is-ready admin-reviews-dash">
+      <div className="admin-dashboard-head admin-motion-item">
+        <div>
+          <h1>Reviews &amp; Testimonials</h1>
+          <p>Manage customer feedback and showcase the experiences customers share with your store.</p>
         </div>
+      </div>
 
-        <section className="admin-key-card">
-          <form className="admin-key-form" onSubmit={unlockAdmin}>
-            <label>
-              Admin key
-              <input
-                type="password"
-                value={keyDraft}
-                onChange={(event) => setKeyDraft(event.target.value)}
-                autoComplete="current-password"
-                required
-              />
-            </label>
-            <button type="submit" className="button button-wine button-rect">
-              {authorized ? 'Update key' : 'Unlock reviews'}
-            </button>
-          </form>
-          <p className="admin-help">
-            The key stays in this browser only and is sent as a request header. Customers cannot
-            upload WhatsApp screenshots from the public shop.
-          </p>
-        </section>
-
-        {!authorized ? (
-          <p className="form-note" role="status">
-            Enter a valid admin key to manage reviews and testimonials.
-          </p>
-        ) : (
-          <>
-            <div className="admin-tabs" role="tablist" aria-label="Review sections">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={tab === 'ratings'}
-                className={tab === 'ratings' ? 'admin-tab is-active' : 'admin-tab'}
-                onClick={() => setTab('ratings')}
-              >
-                Customer Ratings
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={tab === 'photos'}
-                className={tab === 'photos' ? 'admin-tab is-active' : 'admin-tab'}
-                onClick={() => setTab('photos')}
-              >
-                WhatsApp Picture Reviews
-              </button>
+      <section className="admin-kpi-grid admin-reviews-summary" aria-label="Review summary">
+        {summaryCards.map((card, index) => (
+          <article
+            key={card.label}
+            className={`admin-kpi-card admin-motion-card admin-motion-item tone-${card.tone}`}
+            style={{ '--motion-delay': `${index * 40}ms` }}
+          >
+            <div className="admin-kpi-top">
+              <span>{card.label}</span>
+              <strong>{Number(card.value || 0).toLocaleString('en-NG')}</strong>
             </div>
+          </article>
+        ))}
+      </section>
 
-            {note && (
-              <p className="form-note" role="status">
-                {note}
-              </p>
-            )}
-            {error && (
-              <p className="form-note admin-error" role="alert">
-                {error}
-              </p>
-            )}
+      <div className="admin-tabs admin-motion-item" role="tablist" aria-label="Review sections">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'ratings'}
+          className={tab === 'ratings' ? 'admin-tab is-active' : 'admin-tab'}
+          onClick={() => setTab('ratings')}
+        >
+          Customer Ratings
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'photos'}
+          className={tab === 'photos' ? 'admin-tab is-active' : 'admin-tab'}
+          onClick={() => setTab('photos')}
+        >
+          WhatsApp Picture Testimonials
+        </button>
+      </div>
 
-            {tab === 'ratings' && (
-              <section aria-label="Customer ratings moderation">
-                <section className="admin-toolbar" aria-label="Review filters">
-                  <label>
-                    Product
-                    <select
-                      value={productFilter}
-                      onChange={(event) => {
-                        setReviewPage(1);
-                        setProductFilter(event.target.value);
-                      }}
-                    >
-                      <option value="">All products</option>
-                      {productOptions.map((product) => (
-                        <option key={product.id} value={product.id}>
-                          {product.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+      {note ? (
+        <p className="review-success admin-motion-item" role="status">
+          {note}
+        </p>
+      ) : null}
+      {error ? (
+        <p className="admin-error admin-motion-item" role="alert">
+          {error}
+        </p>
+      ) : null}
 
-                  <label>
-                    Rating
-                    <select
-                      value={ratingFilter}
-                      onChange={(event) => {
-                        setReviewPage(1);
-                        setRatingFilter(event.target.value);
-                      }}
-                    >
-                      {RATING_OPTIONS.map((option) => (
-                        <option key={option.value || 'all'} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+      {tab === 'ratings' ? (
+        <section className="admin-panel admin-motion-item" aria-label="Customer ratings moderation">
+          <div className="admin-toolbar admin-reviews-toolbar" aria-label="Review filters">
+            <form className="admin-search" onSubmit={applySearch}>
+              <input
+                value={searchInput}
+                onChange={(event) => setSearchInput(event.target.value)}
+                placeholder="Search customer or product"
+                aria-label="Search customer or product"
+              />
+              <button type="submit" className="button button-wine button-rect">
+                Search
+              </button>
+            </form>
 
-                  <label>
-                    Status
-                    <select
-                      value={statusFilter}
-                      onChange={(event) => {
-                        setReviewPage(1);
-                        setStatusFilter(event.target.value);
-                      }}
-                    >
-                      {STATUS_OPTIONS.map((option) => (
-                        <option key={option.value || 'all'} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </section>
+            <label>
+              Product
+              <select
+                value={productFilter}
+                onChange={(event) => {
+                  setReviewPage(1);
+                  setProductFilter(event.target.value);
+                }}
+              >
+                <option value="">All products</option>
+                {productOptions.map((product) => (
+                  <option key={product.id} value={product.id}>
+                    {product.name}
+                  </option>
+                ))}
+              </select>
+            </label>
 
-                {reviewStatus === 'loading' && <p className="admin-state">Loading reviews…</p>}
+            <label>
+              Status
+              <select
+                value={statusFilter}
+                onChange={(event) => {
+                  setReviewPage(1);
+                  setStatusFilter(event.target.value);
+                }}
+              >
+                {STATUS_OPTIONS.map((option) => (
+                  <option key={option.value || 'all'} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
 
-                {reviewStatus === 'ready' && reviews.length === 0 && (
-                  <div className="admin-empty">
-                    <h2>No reviews found</h2>
-                    <p>Try another filter, or wait for customers to submit ratings.</p>
-                  </div>
-                )}
+          {reviewStatus === 'loading' ? (
+            <div className="admin-skeleton-stack" aria-live="polite">
+              <div className="skeleton admin-skeleton-row" />
+              <div className="skeleton admin-skeleton-row" />
+              <div className="skeleton admin-skeleton-row" />
+            </div>
+          ) : null}
 
-                {reviews.length > 0 && (
-                  <div className="admin-review-list">
-                    {reviews.map((review) => {
-                      const actions = reviewActionsFor(review.status);
-                      const isOpen = inspectId === review.id;
-                      return (
-                        <article
-                          key={review.id}
-                          className={`admin-review-card status-${review.status}${isOpen ? ' is-open' : ''}`}
-                        >
-                          <div className="admin-review-top">
-                            <div>
-                              <p className="admin-review-name">{review.displayName}</p>
-                              <p className="admin-muted">
-                                {review.product?.name || 'Unknown product'}
-                              </p>
-                            </div>
-                            <span className={`admin-status-chip status-${review.status}`}>
-                              {statusLabel(review.status)}
-                            </span>
+          {reviewStatus === 'ready' && reviews.length === 0 ? (
+            <div className="admin-empty">
+              <h2>No reviews found</h2>
+              <p>Try another filter, or wait for customers to submit ratings.</p>
+            </div>
+          ) : null}
+
+          {reviews.length > 0 ? (
+            <div className="admin-review-table-wrap">
+              <table className="admin-review-table">
+                <thead>
+                  <tr>
+                    <th>Customer</th>
+                    <th>Product</th>
+                    <th>Rating</th>
+                    <th>Review</th>
+                    <th>Submitted</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reviews.map((review) => {
+                    const actions = reviewActionsFor(review.status);
+                    return (
+                      <tr key={review.id} className={`status-${review.status}`}>
+                        <td data-label="Customer">
+                          <strong>{review.displayName}</strong>
+                        </td>
+                        <td data-label="Product">
+                          <div className="admin-review-product">
+                            {review.product?.image ? (
+                              <img src={review.product.image} alt="" />
+                            ) : (
+                              <span className="admin-thumb-fallback" aria-hidden="true">
+                                P
+                              </span>
+                            )}
+                            <span>{review.product?.name || 'Unknown product'}</span>
                           </div>
-
-                          <div className="admin-review-meta">
-                            <span className="admin-stars" aria-label={`${review.rating} out of 5`}>
-                              {stars(review.rating)}
-                            </span>
-                            <span className="admin-muted">{formatDate(review.submittedAt)}</span>
-                          </div>
-
-                          <p className="admin-review-excerpt">
+                        </td>
+                        <td data-label="Rating">
+                          <span className="admin-stars" aria-label={`${review.rating} out of 5`}>
+                            {stars(review.rating)}
+                          </span>
+                        </td>
+                        <td data-label="Review">
+                          <button
+                            type="button"
+                            className="text-button admin-review-body-btn"
+                            onClick={() => setInspectId(inspectId === review.id ? '' : review.id)}
+                          >
                             {review.body
-                              ? review.body.length > 140
-                                ? `${review.body.slice(0, 140)}…`
+                              ? review.body.length > 80
+                                ? `${review.body.slice(0, 80)}…`
                                 : review.body
-                              : 'No written review.'}
-                          </p>
-
+                              : 'No written review'}
+                          </button>
+                          {inspectId === review.id ? (
+                            <p className="admin-review-full">{review.body || 'No written review was provided.'}</p>
+                          ) : null}
+                        </td>
+                        <td data-label="Submitted">{formatDate(review.submittedAt)}</td>
+                        <td data-label="Status">
+                          <span className={`admin-status-chip status-${review.status}`}>
+                            {statusLabel(review.status)}
+                          </span>
+                        </td>
+                        <td data-label="Actions">
                           <div className="admin-row-actions">
-                            <button
-                              type="button"
-                              className="text-button"
-                              onClick={() => setInspectId(isOpen ? '' : review.id)}
-                            >
-                              {isOpen ? 'Hide details' : 'Inspect'}
-                            </button>
-                            {actions.includes('approve') && (
-                              <button
-                                type="button"
-                                className="text-button"
-                                disabled={busy}
-                                onClick={() => runReviewAction(review, 'approve')}
-                              >
+                            {actions.includes('approve') ? (
+                              <button type="button" className="text-button" disabled={busy} onClick={() => runReviewAction(review, 'approve')}>
                                 Approve
                               </button>
-                            )}
-                            {actions.includes('reject') && (
-                              <button
-                                type="button"
-                                className="text-button"
-                                disabled={busy}
-                                onClick={() => runReviewAction(review, 'reject')}
-                              >
+                            ) : null}
+                            {actions.includes('reject') ? (
+                              <button type="button" className="text-button" disabled={busy} onClick={() => runReviewAction(review, 'reject')}>
                                 Reject
                               </button>
-                            )}
-                            {actions.includes('unpublish') && (
-                              <button
-                                type="button"
-                                className="text-button"
-                                disabled={busy}
-                                onClick={() => runReviewAction(review, 'unpublish')}
-                              >
+                            ) : null}
+                            {actions.includes('unpublish') ? (
+                              <button type="button" className="text-button" disabled={busy} onClick={() => runReviewAction(review, 'unpublish')}>
                                 Unpublish
                               </button>
-                            )}
-                            {actions.includes('restore') && (
-                              <button
-                                type="button"
-                                className="text-button"
-                                disabled={busy}
-                                onClick={() => runReviewAction(review, 'restore')}
-                              >
+                            ) : null}
+                            {actions.includes('restore') ? (
+                              <button type="button" className="text-button" disabled={busy} onClick={() => runReviewAction(review, 'restore')}>
                                 Restore
                               </button>
-                            )}
-                            {actions.includes('block') && (
-                              <button
-                                type="button"
-                                className="text-button"
-                                disabled={busy}
-                                onClick={() => runReviewAction(review, 'block')}
-                              >
+                            ) : null}
+                            {actions.includes('block') ? (
+                              <button type="button" className="text-button" disabled={busy} onClick={() => runReviewAction(review, 'block')}>
                                 Block
                               </button>
-                            )}
-                            {actions.includes('delete') && (
-                              <button
-                                type="button"
-                                className="text-button admin-danger"
-                                disabled={busy}
-                                onClick={() => runReviewAction(review, 'delete')}
-                              >
+                            ) : null}
+                            {actions.includes('delete') ? (
+                              <button type="button" className="text-button admin-danger" disabled={busy} onClick={() => runReviewAction(review, 'delete')}>
                                 Delete
                               </button>
-                            )}
+                            ) : null}
                           </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
 
-                          {isOpen && (
-                            <div className="admin-review-inspect">
-                              <h3>Review details</h3>
-                              <dl className="admin-review-dl">
-                                <div>
-                                  <dt>Customer</dt>
-                                  <dd>{review.displayName}</dd>
-                                </div>
-                                <div>
-                                  <dt>Product</dt>
-                                  <dd>{review.product?.name || '—'} ({review.product?.slug || '—'})</dd>
-                                </div>
-                                <div>
-                                  <dt>Rating</dt>
-                                  <dd>
-                                    {stars(review.rating)} ({review.rating}/5)
-                                  </dd>
-                                </div>
-                                <div>
-                                  <dt>Submitted</dt>
-                                  <dd>{formatDate(review.submittedAt)}</dd>
-                                </div>
-                                <div>
-                                  <dt>Moderated</dt>
-                                  <dd>{formatDate(review.moderatedAt)}</dd>
-                                </div>
-                                <div>
-                                  <dt>Status</dt>
-                                  <dd>{statusLabel(review.status)}</dd>
-                                </div>
-                              </dl>
-                              <p className="admin-review-body">
-                                {review.body || 'No written review was provided.'}
-                              </p>
-                              {review.status === 'pending' && (
-                                <div className="admin-form-actions">
-                                  <button
-                                    type="button"
-                                    className="button button-wine button-rect"
-                                    disabled={busy}
-                                    onClick={() => runReviewAction(review, 'approve')}
-                                  >
-                                    Approve &amp; publish
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="button button-cream button-rect"
-                                    disabled={busy}
-                                    onClick={() => runReviewAction(review, 'reject')}
-                                  >
-                                    Reject
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </article>
-                      );
-                    })}
-                  </div>
-                )}
+          {reviewPagination && reviewPagination.totalPages > 1 ? (
+            <div className="admin-pagination">
+              <button
+                type="button"
+                className="button button-cream button-rect"
+                disabled={reviewPage <= 1 || busy}
+                onClick={() => setReviewPage((current) => Math.max(1, current - 1))}
+              >
+                Previous
+              </button>
+              <p>
+                Page {reviewPagination.page} of {reviewPagination.totalPages} · {reviewPagination.total}{' '}
+                reviews
+              </p>
+              <button
+                type="button"
+                className="button button-cream button-rect"
+                disabled={!reviewPagination.hasMore || busy}
+                onClick={() => setReviewPage((current) => current + 1)}
+              >
+                Next
+              </button>
+            </div>
+          ) : null}
+        </section>
+      ) : (
+        <section className="admin-motion-item" aria-label="WhatsApp picture testimonials">
+          <section className="admin-panel" aria-label="Upload WhatsApp review pictures">
+            <div className="admin-panel-head">
+              <h2>Upload WhatsApp screenshots</h2>
+            </div>
+            <p className="admin-help">
+              Admin only. Redact private WhatsApp phone numbers and personal details, and obtain
+              permission before publishing. These pictures are testimonials and do not change product
+              star ratings.
+            </p>
 
-                {reviewPagination && reviewPagination.totalPages > 1 && (
-                  <div className="admin-pagination">
-                    <button
-                      type="button"
-                      className="button button-cream button-rect"
-                      disabled={reviewPage <= 1 || busy}
-                      onClick={() => setReviewPage((current) => Math.max(1, current - 1))}
-                    >
-                      Previous
-                    </button>
-                    <p>
-                      Page {reviewPagination.page} of {reviewPagination.totalPages} ·{' '}
-                      {reviewPagination.total} reviews
-                    </p>
-                    <button
-                      type="button"
-                      className="button button-cream button-rect"
-                      disabled={!reviewPagination.hasMore || busy}
-                      onClick={() => setReviewPage((current) => current + 1)}
-                    >
-                      Next
-                    </button>
-                  </div>
-                )}
+            <form className="admin-product-form" onSubmit={handlePhotoUpload}>
+              <label>
+                Images
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/jpg,image/png,image/webp"
+                  multiple
+                  onChange={onPickFiles}
+                />
+              </label>
 
-                {inspected && (
-                  <p className="sr-only" aria-live="polite">
-                    Inspecting review from {inspected.displayName}
-                  </p>
-                )}
-              </section>
-            )}
-
-            {tab === 'photos' && (
-              <section aria-label="WhatsApp picture reviews">
-                <section className="admin-panel" aria-label="Upload WhatsApp review pictures">
-                  <div className="admin-panel-head">
-                    <h2>Upload WhatsApp screenshots</h2>
-                  </div>
-                  <p className="admin-help">
-                    Admin only. These pictures are testimonials and do not change product star
-                    ratings.
-                  </p>
-
-                  <form className="admin-product-form" onSubmit={handlePhotoUpload}>
-                    <label>
-                      Images
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/jpeg,image/jpg,image/png,image/webp"
-                        multiple
-                        onChange={onPickFiles}
-                      />
-                    </label>
-
-                    {localPreviews.length > 0 && (
-                      <div className="admin-image-list admin-photo-preview-list">
-                        {localPreviews.map((url, index) => (
-                          <div key={url} className="admin-image-card">
-                            <div className="admin-image-preview-wrap">
-                              <img className="admin-image-preview" src={url} alt="" />
-                              <span className="admin-pill">Preview {index + 1}</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    <div className="admin-form-grid">
-                      <label>
-                        Caption
-                        <input
-                          value={uploadCaption}
-                          onChange={(event) => setUploadCaption(event.target.value)}
-                          maxLength={280}
-                          placeholder="Optional caption"
-                        />
-                      </label>
-
-                      <label>
-                        Associated product
-                        <select
-                          value={uploadProductId}
-                          onChange={(event) => setUploadProductId(event.target.value)}
-                        >
-                          <option value="">General testimonial</option>
-                          {productOptions.map((product) => (
-                            <option key={product.id} value={product.id}>
-                              {product.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-
-                      <label>
-                        Placement
-                        <select
-                          value={uploadPlacement}
-                          onChange={(event) => setUploadPlacement(event.target.value)}
-                        >
-                          <option value="homepage">Homepage</option>
-                          <option value="product">Product page</option>
-                        </select>
-                      </label>
-
-                      <label className="admin-check">
-                        <input
-                          type="checkbox"
-                          checked={uploadPublished}
-                          onChange={(event) => setUploadPublished(event.target.checked)}
-                        />
-                        Publish immediately
-                      </label>
-                    </div>
-
-                    {uploading && (
-                      <div className="admin-upload-bar" aria-live="polite">
-                        <div className="admin-progress">
-                          <div
-                            className="admin-progress-bar"
-                            style={{ width: `${uploadProgress}%` }}
-                          />
-                        </div>
-                        <span>Uploading… {uploadProgress}%</span>
-                      </div>
-                    )}
-
-                    <div className="admin-form-actions">
-                      <button
-                        type="submit"
-                        className="button button-wine button-rect"
-                        disabled={busy || uploading || selectedFiles.length === 0}
-                      >
-                        {uploading ? 'Uploading…' : 'Upload pictures'}
-                      </button>
-                      {selectedFiles.length > 0 && (
+              {localPreviews.length > 0 ? (
+                <div className="admin-image-list admin-photo-preview-list">
+                  {localPreviews.map((url, index) => (
+                    <div key={url} className="admin-image-card">
+                      <div className="admin-image-preview-wrap">
+                        <img className="admin-image-preview" src={url} alt="" />
                         <button
                           type="button"
-                          className="button button-cream button-rect"
-                          onClick={clearSelectedFiles}
-                          disabled={uploading}
+                          className="text-button admin-danger"
+                          onClick={() => removePreview(index)}
                         >
-                          Clear selection
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+
+              <div className="admin-form-grid">
+                <label>
+                  Caption
+                  <input
+                    value={uploadCaption}
+                    onChange={(event) => setUploadCaption(event.target.value)}
+                    maxLength={280}
+                    placeholder="Optional caption"
+                  />
+                </label>
+                <label>
+                  Associated product
+                  <select value={uploadProductId} onChange={(event) => setUploadProductId(event.target.value)}>
+                    <option value="">General testimonial</option>
+                    {productOptions.map((product) => (
+                      <option key={product.id} value={product.id}>
+                        {product.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Placement
+                  <select value={uploadPlacement} onChange={(event) => setUploadPlacement(event.target.value)}>
+                    <option value="homepage">Homepage</option>
+                    <option value="product">Product page</option>
+                  </select>
+                </label>
+                <label className="admin-check">
+                  <input
+                    type="checkbox"
+                    checked={uploadPublished}
+                    onChange={(event) => setUploadPublished(event.target.checked)}
+                  />
+                  Publish immediately
+                </label>
+              </div>
+
+              {uploading ? (
+                <div className="admin-upload-bar" aria-live="polite">
+                  <div className="admin-progress">
+                    <div className="admin-progress-bar" style={{ width: `${uploadProgress}%` }} />
+                  </div>
+                  <span>Uploading… {uploadProgress}%</span>
+                </div>
+              ) : null}
+
+              <div className="admin-form-actions">
+                <button
+                  type="submit"
+                  className="button button-wine button-rect"
+                  disabled={busy || uploading || selectedFiles.length === 0}
+                >
+                  {uploading ? 'Uploading…' : 'Upload pictures'}
+                </button>
+                {selectedFiles.length > 0 ? (
+                  <button
+                    type="button"
+                    className="button button-cream button-rect"
+                    onClick={clearSelectedFiles}
+                    disabled={uploading}
+                  >
+                    Clear selection
+                  </button>
+                ) : null}
+              </div>
+            </form>
+          </section>
+
+          <section className="admin-toolbar" aria-label="Testimonial filters">
+            <label>
+              Placement
+              <select
+                value={photoPlacementFilter}
+                onChange={(event) => {
+                  setPhotoPage(1);
+                  setPhotoPlacementFilter(event.target.value);
+                }}
+              >
+                <option value="">All placements</option>
+                <option value="homepage">Homepage</option>
+                <option value="product">Product page</option>
+              </select>
+            </label>
+            <label>
+              Visibility
+              <select
+                value={photoPublishedFilter}
+                onChange={(event) => {
+                  setPhotoPage(1);
+                  setPhotoPublishedFilter(event.target.value);
+                }}
+              >
+                <option value="all">All</option>
+                <option value="published">Published</option>
+                <option value="unpublished">Unpublished</option>
+              </select>
+            </label>
+          </section>
+
+          {photoStatus === 'loading' ? (
+            <div className="admin-skeleton-stack" aria-live="polite">
+              <div className="skeleton admin-skeleton-row" />
+              <div className="skeleton admin-skeleton-row" />
+            </div>
+          ) : null}
+
+          {photoStatus === 'ready' && photos.length === 0 ? (
+            <div className="admin-empty">
+              <h2>No picture reviews yet</h2>
+              <p>Upload WhatsApp screenshots above to start building testimonials.</p>
+            </div>
+          ) : null}
+
+          {photos.length > 0 ? (
+            <div className="admin-photo-list">
+              {photos.map((photo, index) => (
+                <article key={photo.id} className="admin-photo-card admin-motion-card">
+                  <div className="admin-photo-media">
+                    <img src={photo.url} alt={photo.caption || 'WhatsApp review'} />
+                    <span
+                      className={
+                        photo.published
+                          ? 'admin-status-chip status-approved'
+                          : 'admin-status-chip status-unpublished'
+                      }
+                    >
+                      {photo.published ? 'Published' : 'Unpublished'}
+                    </span>
+                    <em className="admin-photo-order">Order {photo.sortOrder ?? index + 1}</em>
+                  </div>
+                  <div className="admin-photo-body">
+                    <label>
+                      Caption
+                      <input
+                        value={editingCaptions[photo.id] ?? ''}
+                        onChange={(event) =>
+                          setEditingCaptions((current) => ({
+                            ...current,
+                            [photo.id]: event.target.value,
+                          }))
+                        }
+                        maxLength={280}
+                      />
+                    </label>
+                    <label>
+                      Product
+                      <select
+                        value={photo.productId || ''}
+                        onChange={(event) =>
+                          updatePhotoField(photo, { productId: event.target.value || null })
+                        }
+                        disabled={busy}
+                      >
+                        <option value="">General testimonial</option>
+                        {productOptions.map((product) => (
+                          <option key={product.id} value={product.id}>
+                            {product.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      Placement
+                      <select
+                        value={photo.placement || 'homepage'}
+                        onChange={(event) => updatePhotoField(photo, { placement: event.target.value })}
+                        disabled={busy}
+                      >
+                        <option value="homepage">Homepage</option>
+                        <option value="product">Product page</option>
+                      </select>
+                    </label>
+                    <div className="admin-row-actions">
+                      <button type="button" className="text-button" disabled={busy} onClick={() => savePhotoMeta(photo)}>
+                        Save caption
+                      </button>
+                      <button type="button" className="text-button" disabled={busy || index === 0} onClick={() => movePhoto(photo, 'up')}>
+                        Move up
+                      </button>
+                      <button
+                        type="button"
+                        className="text-button"
+                        disabled={busy || index === photos.length - 1}
+                        onClick={() => movePhoto(photo, 'down')}
+                      >
+                        Move down
+                      </button>
+                      {photo.published ? (
+                        <button type="button" className="text-button" disabled={busy} onClick={() => handlePhotoAction(photo, 'unpublish')}>
+                          Unpublish
+                        </button>
+                      ) : (
+                        <button type="button" className="text-button" disabled={busy} onClick={() => handlePhotoAction(photo, 'publish')}>
+                          Publish
                         </button>
                       )}
+                      <button
+                        type="button"
+                        className="text-button admin-danger"
+                        disabled={busy}
+                        onClick={() => handlePhotoAction(photo, 'delete')}
+                      >
+                        Delete
+                      </button>
                     </div>
-                  </form>
-                </section>
-
-                <section className="admin-toolbar" aria-label="Testimonial filters">
-                  <label>
-                    Placement
-                    <select
-                      value={photoPlacementFilter}
-                      onChange={(event) => {
-                        setPhotoPage(1);
-                        setPhotoPlacementFilter(event.target.value);
-                      }}
-                    >
-                      <option value="">All placements</option>
-                      <option value="homepage">Homepage</option>
-                      <option value="product">Product page</option>
-                    </select>
-                  </label>
-                  <label>
-                    Visibility
-                    <select
-                      value={photoPublishedFilter}
-                      onChange={(event) => {
-                        setPhotoPage(1);
-                        setPhotoPublishedFilter(event.target.value);
-                      }}
-                    >
-                      <option value="all">All</option>
-                      <option value="published">Published</option>
-                      <option value="unpublished">Unpublished</option>
-                    </select>
-                  </label>
-                </section>
-
-                {photoStatus === 'loading' && <p className="admin-state">Loading testimonials…</p>}
-
-                {photoStatus === 'ready' && photos.length === 0 && (
-                  <div className="admin-empty">
-                    <h2>No picture reviews yet</h2>
-                    <p>Upload WhatsApp screenshots above to start building testimonials.</p>
                   </div>
-                )}
+                </article>
+              ))}
+            </div>
+          ) : null}
 
-                {photos.length > 0 && (
-                  <div className="admin-photo-list">
-                    {photos.map((photo, index) => (
-                      <article key={photo.id} className="admin-photo-card">
-                        <div className="admin-photo-media">
-                          <img src={photo.url} alt={photo.caption || 'WhatsApp review'} />
-                          <span
-                            className={
-                              photo.published
-                                ? 'admin-status-chip status-approved'
-                                : 'admin-status-chip status-unpublished'
-                            }
-                          >
-                            {photo.published ? 'Published' : 'Unpublished'}
-                          </span>
-                        </div>
-
-                        <div className="admin-photo-body">
-                          <label>
-                            Caption
-                            <input
-                              value={editingCaptions[photo.id] ?? ''}
-                              onChange={(event) =>
-                                setEditingCaptions((current) => ({
-                                  ...current,
-                                  [photo.id]: event.target.value,
-                                }))
-                              }
-                              maxLength={280}
-                            />
-                          </label>
-
-                          <label>
-                            Product
-                            <select
-                              value={photo.productId || ''}
-                              onChange={(event) =>
-                                updatePhotoField(photo, {
-                                  productId: event.target.value || null,
-                                })
-                              }
-                              disabled={busy}
-                            >
-                              <option value="">General testimonial</option>
-                              {productOptions.map((product) => (
-                                <option key={product.id} value={product.id}>
-                                  {product.name}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-
-                          <label>
-                            Placement
-                            <select
-                              value={photo.placement || 'homepage'}
-                              onChange={(event) =>
-                                updatePhotoField(photo, { placement: event.target.value })
-                              }
-                              disabled={busy}
-                            >
-                              <option value="homepage">Homepage</option>
-                              <option value="product">Product page</option>
-                            </select>
-                          </label>
-
-                          <div className="admin-row-actions">
-                            <button
-                              type="button"
-                              className="text-button"
-                              disabled={busy}
-                              onClick={() => savePhotoMeta(photo)}
-                            >
-                              Save caption
-                            </button>
-                            <button
-                              type="button"
-                              className="text-button"
-                              disabled={busy || index === 0}
-                              onClick={() => movePhoto(photo, 'up')}
-                            >
-                              Move up
-                            </button>
-                            <button
-                              type="button"
-                              className="text-button"
-                              disabled={busy || index === photos.length - 1}
-                              onClick={() => movePhoto(photo, 'down')}
-                            >
-                              Move down
-                            </button>
-                            {photo.published ? (
-                              <button
-                                type="button"
-                                className="text-button"
-                                disabled={busy}
-                                onClick={() => handlePhotoAction(photo, 'unpublish')}
-                              >
-                                Unpublish
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                className="text-button"
-                                disabled={busy}
-                                onClick={() => handlePhotoAction(photo, 'publish')}
-                              >
-                                Publish
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              className="text-button admin-danger"
-                              disabled={busy}
-                              onClick={() => handlePhotoAction(photo, 'delete')}
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-                )}
-
-                {photoPagination && photoPagination.totalPages > 1 && (
-                  <div className="admin-pagination">
-                    <button
-                      type="button"
-                      className="button button-cream button-rect"
-                      disabled={photoPage <= 1 || busy}
-                      onClick={() => setPhotoPage((current) => Math.max(1, current - 1))}
-                    >
-                      Previous
-                    </button>
-                    <p>
-                      Page {photoPagination.page} of {photoPagination.totalPages} ·{' '}
-                      {photoPagination.total} pictures
-                    </p>
-                    <button
-                      type="button"
-                      className="button button-cream button-rect"
-                      disabled={!photoPagination.hasMore || busy}
-                      onClick={() => setPhotoPage((current) => current + 1)}
-                    >
-                      Next
-                    </button>
-                  </div>
-                )}
-              </section>
-            )}
-          </>
-        )}
-      </div>
-    </article>
+          {photoPagination && photoPagination.totalPages > 1 ? (
+            <div className="admin-pagination">
+              <button
+                type="button"
+                className="button button-cream button-rect"
+                disabled={photoPage <= 1 || busy}
+                onClick={() => setPhotoPage((current) => Math.max(1, current - 1))}
+              >
+                Previous
+              </button>
+              <p>
+                Page {photoPagination.page} of {photoPagination.totalPages} · {photoPagination.total}{' '}
+                pictures
+              </p>
+              <button
+                type="button"
+                className="button button-cream button-rect"
+                disabled={!photoPagination.hasMore || busy}
+                onClick={() => setPhotoPage((current) => current + 1)}
+              >
+                Next
+              </button>
+            </div>
+          ) : null}
+        </section>
+      )}
+    </div>
   );
 }

@@ -18,11 +18,13 @@ import {
 import { getStore, putStore } from '../controllers/storeController.js';
 import { requireAdmin } from '../middleware/adminAuth.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
+import adminAnalyticsRoutes from './adminAnalytics.js';
 import adminCategoryRoutes from './adminCategories.js';
 import adminProductRoutes from './adminProducts.js';
 import adminReviewPhotoRoutes from './adminReviewPhotos.js';
 import adminReviewRoutes from './adminReviews.js';
 import adminUploadRoutes from './adminUploads.js';
+import analyticsRoutes from './analytics.js';
 import categoryRoutes from './categories.js';
 import productRoutes from './products.js';
 import reviewPhotoRoutes from './reviewPhotos.js';
@@ -62,6 +64,7 @@ router.use('/admin/categories', adminCatalogLimiter, adminCategoryRoutes);
 router.use('/admin/uploads', adminCatalogLimiter, adminUploadRoutes);
 router.use('/admin/reviews', adminCatalogLimiter, adminReviewRoutes);
 router.use('/admin/review-photos', adminCatalogLimiter, adminReviewPhotoRoutes);
+router.use('/admin/analytics', adminCatalogLimiter, adminAnalyticsRoutes);
 
 router.get('/homepage', asyncHandler(getHomepage));
 router.get('/homepage/banners', asyncHandler(getBanners));
@@ -78,6 +81,7 @@ router.use('/products', productRoutes);
 router.use('/categories', categoryRoutes);
 router.use('/reviews', reviewRoutes);
 router.use('/review-photos', reviewPhotoRoutes);
+router.use('/analytics', analyticsRoutes);
 
 router.post('/newsletter', writeLimiter, asyncHandler(subscribe));
 router.post('/enquiries', writeLimiter, asyncHandler(createEnquiry));

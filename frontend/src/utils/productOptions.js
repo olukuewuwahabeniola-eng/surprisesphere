@@ -90,6 +90,9 @@ export function getAvailableColours(product, selectedSize = '') {
 }
 
 export function resolveProductSelection(product, { size = '', colour = '' } = {}) {
+  if (!product) {
+    return { size: size || '', colour: colour || '', price: 0, image: '' };
+  }
   const basePrice = Number(product?.price) || 0;
   const variants = getProductVariants(product).filter(variantInStock);
   const sizeOptions = normalizeOptionEntries(product?.sizes);

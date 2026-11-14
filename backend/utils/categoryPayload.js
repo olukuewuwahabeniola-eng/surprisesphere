@@ -194,10 +194,15 @@ export function parseAdminCategoryQuery(query = {}) {
   const status = String(query.status || query.active || 'all').toLowerCase();
   if (status === 'active' || status === 'true' || status === 'published') {
     filters.active = true;
-  } else if (status === 'inactive' || status === 'false' || status === 'draft') {
+  } else if (
+    status === 'inactive' ||
+    status === 'false' ||
+    status === 'draft' ||
+    status === 'hidden'
+  ) {
     filters.active = false;
   } else if (status !== 'all' && status !== '') {
-    throw new AppError('status must be all, active or inactive.', 400);
+    throw new AppError('status must be all, active, inactive, published or hidden.', 400);
   }
 
   if (query.featured === 'true' || query.featured === true) {

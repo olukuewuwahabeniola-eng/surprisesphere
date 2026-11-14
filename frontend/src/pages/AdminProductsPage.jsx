@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useOutletContext } from 'react-router-dom';
 import AdminProductForm, {
   blankProductForm,
   productToForm,
@@ -18,9 +18,17 @@ import { formatNaira } from '../utils/money';
 const PAGE_SIZE = 12;
 
 export default function AdminProductsPage() {
-  const [adminKey, setAdminKey] = useState(() => getStoredAdminKey());
-  const [keyDraft, setKeyDraft] = useState(() => getStoredAdminKey());
-  const [authorized, setAuthorized] = useState(Boolean(getStoredAdminKey()));
+  const outlet = useOutletContext() || {};
+  const [adminKey, setAdminKey] = useState(() => outlet.adminKey || getStoredAdminKey());
+  const [keyDraft, setKeyDraft] = useState(() => outlet.adminKey || getStoredAdminKey());
+  const [authorized, setAuthorized] = useState(Boolean(outlet.adminKey || getStoredAdminKey()));
+
+  useEffect(() => {
+    if (outlet.adminKey) {
+      setAdminKey(outlet.adminKey);
+      setKeyDraft(outlet.adminKey);
+    }
+  }, [outlet.adminKey]);
 
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -198,7 +206,7 @@ export default function AdminProductsPage() {
           </div>
           <div className="admin-products-nav">
             <Link className="text-button" to="/admin">
-              ← Store settings
+              ← Dashboard
             </Link>
             <Link className="text-button" to="/admin/reviews">
               Reviews
@@ -211,27 +219,29 @@ export default function AdminProductsPage() {
           </div>
         </div>
 
-        <section className="admin-key-card">
-          <form className="admin-key-form" onSubmit={unlockAdmin}>
-            <label>
-              Admin key
-              <input
-                type="password"
-                value={keyDraft}
-                onChange={(event) => setKeyDraft(event.target.value)}
-                autoComplete="current-password"
-                required
-              />
-            </label>
-            <button type="submit" className="button button-wine button-rect">
-              {authorized ? 'Update key' : 'Unlock products'}
-            </button>
-          </form>
-          <p className="admin-help">
-            The key stays in this browser only. It is sent as a request header and is never stored in
-            frontend environment files.
-          </p>
-        </section>
+        {!outlet.adminKey ? (
+          <section className="admin-key-card">
+            <form className="admin-key-form" onSubmit={unlockAdmin}>
+              <label>
+                Admin key
+                <input
+                  type="password"
+                  value={keyDraft}
+                  onChange={(event) => setKeyDraft(event.target.value)}
+                  autoComplete="current-password"
+                  required
+                />
+              </label>
+              <button type="submit" className="button button-wine button-rect">
+                {authorized ? 'Update key' : 'Unlock products'}
+              </button>
+            </form>
+            <p className="admin-help">
+              The key stays in this browser only. It is sent as a request header and is never stored in
+              frontend environment files.
+            </p>
+          </section>
+        ) : null}
 
         {!authorized ? (
           <p className="form-note" role="status">

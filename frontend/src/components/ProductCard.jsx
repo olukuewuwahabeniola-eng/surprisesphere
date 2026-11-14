@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { CompactProductRating } from './StarRating';
 import { useShop } from '../context/ShopContext';
 import { formatNaira } from '../utils/money';
 import {
@@ -92,10 +94,12 @@ export default function ProductCard({ product, index = 0 }) {
       style={{ '--reveal-delay': `${Math.min(index, 10) * 55}ms` }}
     >
       <div className={`product-media${hoverImage ? ' has-hover-swap' : ''}`}>
-        <img className="product-image is-primary" src={displayImage} alt={product.alt} />
-        {hoverImage ? (
-          <img className="product-image is-secondary" src={hoverImage} alt="" aria-hidden="true" />
-        ) : null}
+        <Link to={`/product/${product.slug || product.id}`} className="product-media-link">
+          <img className="product-image is-primary" src={displayImage} alt={product.alt} />
+          {hoverImage ? (
+            <img className="product-image is-secondary" src={hoverImage} alt="" aria-hidden="true" />
+          ) : null}
+        </Link>
         <button
           type="button"
           className={wished ? 'wish is-on' : 'wish'}
@@ -107,7 +111,13 @@ export default function ProductCard({ product, index = 0 }) {
         </button>
       </div>
       <div className="product-body">
-        <h3>{product.name}</h3>
+        <h3>
+          <Link to={`/product/${product.slug || product.id}`}>{product.name}</Link>
+        </h3>
+        <CompactProductRating
+          average={product.ratingAverage || product.rating?.average || 0}
+          count={product.ratingCount || product.rating?.count || 0}
+        />
         <p className="product-price">{formatNaira(selection.price)}</p>
 
         {(sizes.length > 0 || colours.length > 0) && (

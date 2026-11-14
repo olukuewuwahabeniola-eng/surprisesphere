@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { getHomepage, getStore, readError } from '../services/api';
+import { trackAddToCart } from '../utils/analytics';
 import { cartLineKey } from '../utils/whatsappOrder';
 
 const ShopContext = createContext(null);
@@ -99,6 +100,7 @@ export function ShopProvider({ children }) {
   const subtotal = bag.cart.reduce((sum, item) => sum + item.price * item.qty, 0);
 
   function addToCart(product, options = {}) {
+    const addQty = Math.max(1, Number(options.qty) || 1);
     const next = snapshot(product, {
       size: options.size || '',
       colour: options.colour || '',
@@ -111,11 +113,25 @@ export function ShopProvider({ children }) {
       const cart = existing
         ? current.cart.map((item) =>
             item.lineKey === next.lineKey
-              ? { ...item, qty: item.qty + 1, price: next.price, image: next.image }
+              ? {
+                  ...item,
+                  qty: item.qty + addQty,
+                  price: next.price,
+                  image: next.image,
+                }
               : item,
           )
-        : [...current.cart, { ...next, qty: 1 }];
+        : [...current.cart, { ...next, qty: addQty }];
       return { ...current, cart };
+    });
+
+    trackAddToCart({
+      productId: product.id,
+      productName: product.name,
+      qty: addQty,
+      value: Number(next.price) * addQty,
+      size: next.size,
+      colour: next.colour,
     });
   }
 

@@ -101,18 +101,27 @@ export async function listAdminCategories(rawQuery = {}) {
   const { page, pageSize, skip } = readPagination(rawQuery);
   const { filters, sort, sortKey } = parseAdminCategoryQuery(rawQuery);
 
-  const [total, docs] = await Promise.all([
+  const [total, docs, publishedCount, hiddenCount] = await Promise.all([
     Category.countDocuments(filters),
     Category.find(filters).sort(sort).skip(skip).limit(pageSize).lean(),
+    Category.countDocuments({ active: true }),
+    Category.countDocuments({ active: false }),
   ]);
 
-  const counts = await Promise.all(
+  const productCounts = await Promise.all(
     docs.map((doc) => Product.countDocuments({ category: doc._id })),
   );
 
   return {
-    categories: docs.map((doc, index) => mapCategory({ ...doc, productCount: counts[index] })),
+    categories: docs.map((doc, index) =>
+      mapCategory({ ...doc, productCount: productCounts[index] }),
+    ),
     pagination: buildPagination({ page, pageSize, total }),
+    counts: {
+      total: publishedCount + hiddenCount,
+      published: publishedCount,
+      hidden: hiddenCount,
+    },
     filters: {
       ...rawQuery,
       sort: sortKey,

@@ -29,17 +29,26 @@ export function mapAdminReview(doc) {
     return null;
   }
 
+  const productImage =
+    review.product && typeof review.product === 'object'
+      ? review.product.images?.[0]?.url ||
+        review.product.images?.[0] ||
+        review.product.image ||
+        ''
+      : '';
   const product =
     review.product && typeof review.product === 'object'
       ? {
           id: String(review.product._id || review.product.id || ''),
           name: review.product.name || '',
           slug: review.product.slug || '',
+          image: typeof productImage === 'string' ? productImage : '',
         }
       : {
           id: String(review.product || ''),
           name: '',
           slug: '',
+          image: '',
         };
 
   return {
