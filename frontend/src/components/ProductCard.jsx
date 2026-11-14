@@ -4,8 +4,12 @@ import { CompactProductRating } from './StarRating';
 import { useShop } from '../context/ShopContext';
 import { formatNaira } from '../utils/money';
 import {
-  getAvailableColours,
+  colourSwatchHex,
   getAvailableSizes,
+  getColourOptions,
+  getImagesForColour,
+  getSelectionStock,
+  isSelectionPurchasable,
   resolveProductSelection,
 } from '../utils/productOptions';
 
@@ -17,61 +21,61 @@ function HeartIcon() {
   );
 }
 
-function resolveHoverImage(product, primaryImage) {
-  const gallery = Array.isArray(product?.images)
-    ? product.images.map((entry) => (typeof entry === 'string' ? entry : entry?.url)).filter(Boolean)
-    : [];
-  const fromGallery = gallery.find((url) => url && url !== primaryImage);
-  if (fromGallery) {
-    return fromGallery;
-  }
-
-  const variants = Array.isArray(product?.variants) ? product.variants : [];
-  const fromVariant = variants
-    .map((variant) => variant?.image)
-    .find((url) => url && url !== primaryImage);
-  return fromVariant || '';
-}
-
 export default function ProductCard({ product, index = 0 }) {
   const { addToCart, toggleWishlist, isWished, setCartOpen } = useShop();
   const [added, setAdded] = useState(false);
   const [note, setNote] = useState('');
 
-  const sizes = useMemo(() => getAvailableSizes(product), [product]);
+  const colourOptions = useMemo(
+    () => getColourOptions(product).filter((entry) => entry.available !== false),
+    [product],
+  );
+  const [colour, setColour] = useState(colourOptions[0]?.label || '');
+  const sizes = useMemo(() => getAvailableSizes(product, colour), [product, colour]);
   const [size, setSize] = useState(sizes[0] || '');
-  const colours = useMemo(() => getAvailableColours(product, size), [product, size]);
-  const [colour, setColour] = useState(colours[0] || '');
 
   useEffect(() => {
-    setSize(sizes[0] || '');
-  }, [product.id, sizes]);
-
-  useEffect(() => {
-    if (!colours.includes(colour)) {
-      setColour(colours[0] || '');
+    if (!colourOptions.some((entry) => entry.label === colour)) {
+      setColour(colourOptions[0]?.label || '');
     }
-  }, [colours, colour]);
+  }, [colourOptions, colour]);
+
+  useEffect(() => {
+    if (!sizes.includes(size)) {
+      setSize(sizes[0] || '');
+    }
+  }, [sizes, size]);
 
   const selection = useMemo(
     () => resolveProductSelection(product, { size, colour }),
     [product, size, colour],
   );
 
+  const colourImages = useMemo(() => getImagesForColour(product, colour), [product, colour]);
+  const displayImage = selection.image || colourImages[0] || product.image;
+  const hoverImage = colourImages.find((url) => url && url !== displayImage) || '';
+  const inStock = isSelectionPurchasable(product, {
+    size: selection.size,
+    colour: selection.colour,
+  });
+  const selectionStock = getSelectionStock(product, {
+    size: selection.size,
+    colour: selection.colour,
+  });
+
   const wished = isWished(product.id);
-  const displayImage = selection.image || product.image;
-  const hoverImage = useMemo(
-    () => resolveHoverImage(product, displayImage),
-    [product, displayImage],
-  );
 
   function handleAdd() {
     if (sizes.length > 0 && !size) {
       setNote('Choose a size first.');
       return;
     }
-    if (colours.length > 0 && !colour) {
+    if (colourOptions.length > 0 && !colour) {
       setNote('Choose a colour first.');
+      return;
+    }
+    if (!inStock) {
+      setNote('That option is unavailable.');
       return;
     }
     setNote('');
@@ -80,6 +84,7 @@ export default function ProductCard({ product, index = 0 }) {
       colour: selection.colour,
       price: selection.price,
       image: displayImage,
+      maxStock: selectionStock,
     });
     setAdded(true);
     setCartOpen(true);
@@ -120,34 +125,42 @@ export default function ProductCard({ product, index = 0 }) {
         />
         <p className="product-price">{formatNaira(selection.price)}</p>
 
-        {(sizes.length > 0 || colours.length > 0) && (
-          <div className="product-options">
-            {sizes.length > 0 && (
-              <label>
-                <span className="sr-only">Size for {product.name}</span>
-                <select value={size} onChange={(event) => setSize(event.target.value)}>
-                  {sizes.map((entry) => (
-                    <option key={entry} value={entry}>
-                      Size: {entry}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-            {colours.length > 0 && (
-              <label>
-                <span className="sr-only">Colour for {product.name}</span>
-                <select value={colour} onChange={(event) => setColour(event.target.value)}>
-                  {colours.map((entry) => (
-                    <option key={entry} value={entry}>
-                      Colour: {entry}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
+        {colourOptions.length > 0 ? (
+          <div className="product-swatches" role="listbox" aria-label={`Colours for ${product.name}`}>
+            {colourOptions.map((entry) => {
+              const selected = entry.label === colour;
+              return (
+                <button
+                  key={entry.label}
+                  type="button"
+                  role="option"
+                  aria-selected={selected}
+                  className={`product-swatch${selected ? ' is-selected' : ''}`}
+                  title={entry.label}
+                  style={{ background: colourSwatchHex(entry.label, entry.hex) }}
+                  onClick={() => setColour(entry.label)}
+                >
+                  <span className="sr-only">{entry.label}</span>
+                </button>
+              );
+            })}
           </div>
-        )}
+        ) : null}
+
+        {sizes.length > 0 ? (
+          <div className="product-options">
+            <label>
+              <span className="sr-only">Size for {product.name}</span>
+              <select value={size} onChange={(event) => setSize(event.target.value)}>
+                {sizes.map((entry) => (
+                  <option key={entry} value={entry}>
+                    Size: {entry}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        ) : null}
 
         {note && <p className="product-option-note">{note}</p>}
 
@@ -155,8 +168,9 @@ export default function ProductCard({ product, index = 0 }) {
           type="button"
           className="button button-wine button-block button-rect"
           onClick={handleAdd}
+          disabled={!inStock}
         >
-          {added ? 'Added' : 'Add to Cart'}
+          {added ? 'Added' : inStock ? 'Add to Cart' : 'Unavailable'}
         </button>
       </div>
     </article>

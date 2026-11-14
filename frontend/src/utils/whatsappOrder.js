@@ -8,15 +8,15 @@ export function lineSubtotal(item) {
   return Number(item.price || 0) * Number(item.qty || 0);
 }
 
-function variationLabel(item) {
-  const parts = [];
-  if (item.size) {
-    parts.push(`Size: ${item.size}`);
-  }
+function variationLines(item) {
+  const lines = [];
   if (item.colour) {
-    parts.push(`Colour: ${item.colour}`);
+    lines.push(`Colour: ${item.colour}`);
   }
-  return parts.join(' | ');
+  if (item.size) {
+    lines.push(`Size: ${item.size}`);
+  }
+  return lines;
 }
 
 export function buildWhatsAppOrderMessage(cart, grandTotal) {
@@ -28,14 +28,15 @@ export function buildWhatsAppOrderMessage(cart, grandTotal) {
   ];
 
   cart.forEach((item, index) => {
-    const variation = variationLabel(item);
-    lines.push(`${index + 1}. ${item.name}`);
-    if (variation) {
-      lines.push(`   ${variation}`);
+    lines.push(`${index + 1}. Product: ${item.name}`);
+    variationLines(item).forEach((line) => {
+      lines.push(`   ${line}`);
+    });
+    lines.push(`   Quantity: ${item.qty}`);
+    lines.push(`   Price: ${formatNaira(item.price)}`);
+    if (Number(item.qty) > 1) {
+      lines.push(`   Subtotal: ${formatNaira(lineSubtotal(item))}`);
     }
-    lines.push(`   Qty: ${item.qty}`);
-    lines.push(`   Price: ${formatNaira(item.price)} each`);
-    lines.push(`   Subtotal: ${formatNaira(lineSubtotal(item))}`);
     lines.push('');
   });
 

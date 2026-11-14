@@ -133,8 +133,64 @@ export function normalizeOptionList(input, label) {
       if (hasOwn(entry, 'stock') && entry.stock !== '' && entry.stock != null) {
         mapped.stock = asNumber(entry.stock, `${label} stock`, { min: 0 });
       }
+      if (hasOwn(entry, 'available') || hasOwn(entry, 'inStock') || hasOwn(entry, 'unavailable')) {
+        if (hasOwn(entry, 'unavailable')) {
+          mapped.available = !asBoolean(entry.unavailable, `${label} unavailable`);
+        } else if (hasOwn(entry, 'available')) {
+          mapped.available = asBoolean(entry.available, `${label} available`) ?? true;
+        } else {
+          mapped.available = asBoolean(entry.inStock, `${label} inStock`) ?? true;
+        }
+      }
       if (entry.image) {
         mapped.image = asTrimmedString(entry.image, { max: 2000 });
+      }
+      if (Array.isArray(entry.images) && entry.images.length) {
+        const images = entry.images
+          .map((image) => {
+            if (typeof image === 'string') {
+              const url = asTrimmedString(image, { max: 2000, allowEmpty: false });
+              return url ? { url, alt: optionLabel } : null;
+            }
+            if (!image || typeof image !== 'object') {
+              return null;
+            }
+            const url = asTrimmedString(image.url || image.src || '', {
+              max: 2000,
+              allowEmpty: false,
+            });
+            if (!url) {
+              return null;
+            }
+            return {
+              url,
+              alt: asTrimmedString(image.alt || optionLabel, { max: 200 }),
+            };
+          })
+          .filter(Boolean);
+        if (images.length) {
+          mapped.images = images;
+          if (!mapped.image) {
+            mapped.image = images[0].url;
+          }
+        }
+      }
+      if (entry.hex || entry.swatch || entry.colourValue || entry.colorValue) {
+        const hex = asTrimmedString(
+          entry.hex || entry.swatch || entry.colourValue || entry.colorValue,
+          { max: 32 },
+        );
+        if (hex) {
+          mapped.hex = hex;
+        }
+      }
+      if (Array.isArray(entry.sizes)) {
+        const sizes = entry.sizes
+          .map((size) => asTrimmedString(size, { max: 40, allowEmpty: false }))
+          .filter(Boolean);
+        if (sizes.length) {
+          mapped.sizes = sizes;
+        }
       }
       return mapped;
     })
@@ -166,6 +222,9 @@ export function normalizeVariants(input) {
       if (hasOwn(entry, 'stock') && entry.stock !== '' && entry.stock != null) {
         mapped.stock = asNumber(entry.stock, 'Variant stock', { min: 0 });
       }
+      if (hasOwn(entry, 'available')) {
+        mapped.available = asBoolean(entry.available, 'Variant available') ?? true;
+      }
       if (entry.image) {
         mapped.image = asTrimmedString(entry.image, { max: 2000 });
       }
@@ -177,6 +236,46 @@ export function normalizeVariants(input) {
       return mapped;
     })
     .filter(Boolean);
+}
+
+/**
+ * If the client sent rich colours but no size×colour matrix, expand one.
+ * Existing explicit variants always win.
+ */
+export function ensureVariantsFromColours({ colours = [], variants = [] } = {}) {
+  if (Array.isArray(variants) && variants.length) {
+    return variants;
+  }
+
+  const expanded = [];
+  (Array.isArray(colours) ? colours : []).forEach((colour) => {
+    if (!colour || typeof colour !== 'object') {
+      return;
+    }
+    const label = asTrimmedString(colour.label || colour.name || '', { max: 80, allowEmpty: false });
+    if (!label) {
+      return;
+    }
+    if (colour.available === false) {
+      return;
+    }
+    const sizes =
+      Array.isArray(colour.sizes) && colour.sizes.length
+        ? colour.sizes.map((size) => asTrimmedString(size, { max: 40 })).filter(Boolean)
+        : [''];
+    sizes.forEach((size) => {
+      const row = {
+        colour: label,
+        size,
+        image: colour.image || colour.images?.[0]?.url || colour.images?.[0] || '',
+      };
+      if (colour.price != null) row.price = colour.price;
+      if (colour.stock != null) row.stock = colour.stock;
+      if (colour.available != null) row.available = colour.available !== false;
+      expanded.push(row);
+    });
+  });
+  return expanded;
 }
 
 /**
@@ -200,15 +299,31 @@ export function sanitizeProductCreateInput(body = {}) {
     throw new AppError('Category is required.', 400);
   }
 
+  const colours = normalizeOptionList(body.colours ?? body.colors ?? [], 'colours') || [];
+  const variants =
+    ensureVariantsFromColours({
+      colours,
+      variants: normalizeVariants(body.variants ?? []) || [],
+    }) || [];
+
+  const colourStockTotal = colours.reduce((sum, colour) => {
+    if (!colour || typeof colour !== 'object' || colour.stock == null) {
+      return sum;
+    }
+    return sum + Number(colour.stock || 0);
+  }, 0);
+
   const payload = {
     name,
     description: asTrimmedString(body.description || body.detail || '', { max: 4000 }),
     price,
     images,
     sizes: normalizeOptionList(body.sizes ?? [], 'sizes') || [],
-    colours: normalizeOptionList(body.colours ?? body.colors ?? [], 'colours') || [],
-    variants: normalizeVariants(body.variants ?? []) || [],
-    stock: asNumber(body.stock, 'Stock', { min: 0 }) ?? 0,
+    colours,
+    variants,
+    stock:
+      asNumber(body.stock, 'Stock', { min: 0 }) ??
+      (colourStockTotal > 0 ? colourStockTotal : 0),
     bestSeller: asBoolean(body.bestSeller, 'bestSeller') ?? false,
     newArrival: asBoolean(body.newArrival, 'newArrival') ?? false,
     featured: asBoolean(body.featured, 'featured') ?? false,
@@ -267,8 +382,21 @@ export function sanitizeProductUpdateInput(body = {}) {
     patch.colours = normalizeOptionList(body.colours ?? body.colors, 'colours') || [];
   }
 
-  if (hasOwn(body, 'variants')) {
-    patch.variants = normalizeVariants(body.variants) || [];
+  if (hasOwn(body, 'variants') || hasOwn(body, 'colours') || hasOwn(body, 'colors')) {
+    const colours =
+      patch.colours ??
+      (hasOwn(body, 'colours') || hasOwn(body, 'colors')
+        ? normalizeOptionList(body.colours ?? body.colors, 'colours') || []
+        : undefined);
+    const explicitVariants = hasOwn(body, 'variants')
+      ? normalizeVariants(body.variants) || []
+      : undefined;
+    if (explicitVariants !== undefined || colours !== undefined) {
+      patch.variants = ensureVariantsFromColours({
+        colours: colours || [],
+        variants: explicitVariants || [],
+      });
+    }
   }
 
   if (hasOwn(body, 'stock')) {

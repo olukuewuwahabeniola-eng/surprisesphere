@@ -1,6 +1,7 @@
 import { isDbConnected } from '../config/db.js';
 import {
   createProduct,
+  createProductsBulk,
   deleteProduct,
   getAdminProductByIdOrSlug,
   listAdminProducts,
@@ -44,6 +45,32 @@ export async function createAdminProductHandler(req, res) {
   const result = await createProduct(stripSecrets(req.body || {}));
   res.status(201).json({
     message: 'Product created.',
+    ...result,
+  });
+}
+
+export async function createAdminProductsBulkHandler(req, res) {
+  assertMongoForAdminWrite();
+  const body = stripSecrets(req.body || {});
+  const items = Array.isArray(body.products)
+    ? body.products
+    : Array.isArray(body.items)
+      ? body.items
+      : Array.isArray(body)
+        ? body
+        : null;
+
+  if (!items) {
+    throw new AppError('Send a products array for bulk upload.', 400);
+  }
+
+  const result = await createProductsBulk(items);
+  const status = result.summary.created > 0 ? 201 : 400;
+  res.status(status).json({
+    message:
+      result.summary.failed === 0
+        ? `Created ${result.summary.created} product${result.summary.created === 1 ? '' : 's'}.`
+        : `Created ${result.summary.created} of ${result.summary.total}. ${result.summary.failed} failed.`,
     ...result,
   });
 }

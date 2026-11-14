@@ -3,7 +3,7 @@ import 'dotenv/config';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
-import { connectDB, dbState } from './config/db.js';
+import { connectDB, dbState, isDbConnected } from './config/db.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { notFound } from './middleware/notFound.js';
 import apiRoutes from './routes/index.js';
@@ -11,9 +11,19 @@ import apiRoutes from './routes/index.js';
 let connectionPromise;
 
 export function ensureDb() {
-  if (!connectionPromise) {
-    connectionPromise = connectDB();
+  if (isDbConnected()) {
+    return Promise.resolve(true);
   }
+
+  // Retry after a failed attempt — do not permanently cache a dead connection.
+  if (!connectionPromise) {
+    connectionPromise = connectDB().finally(() => {
+      if (!isDbConnected()) {
+        connectionPromise = null;
+      }
+    });
+  }
+
   return connectionPromise;
 }
 

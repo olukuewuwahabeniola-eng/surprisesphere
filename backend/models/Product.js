@@ -16,9 +16,17 @@ const variantSchema = new mongoose.Schema(
     price: { type: Number, min: [0, 'Variant price cannot be negative.'] },
     stock: { type: Number, min: [0, 'Variant stock cannot be negative.'], default: undefined },
     image: { type: String, trim: true, default: '' },
+    available: { type: Boolean, default: true },
   },
   { _id: false },
 );
+
+/**
+ * Colour variants stay Mixed so legacy plain-string colours keep loading.
+ * Rich shape (normalized in productPayload):
+ * { label, hex?, price?, stock?, available?, image?, images[], sizes[] }
+ */
+
 
 const productSchema = new mongoose.Schema(
   {

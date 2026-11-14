@@ -32,9 +32,34 @@ function mapOptionEntries(entries = []) {
         if (entry.image) {
           mapped.image = entry.image;
         }
+        if (Array.isArray(entry.images) && entry.images.length) {
+          mapped.images = entry.images
+            .map((image) => {
+              if (typeof image === 'string') {
+                return image ? { url: image, alt: label } : null;
+              }
+              const url = image?.url || image?.src || '';
+              return url ? { url, alt: image.alt || label } : null;
+            })
+            .filter(Boolean);
+          if (!mapped.image && mapped.images[0]) {
+            mapped.image = mapped.images[0].url;
+          }
+        }
+        if (entry.hex || entry.swatch) {
+          mapped.hex = String(entry.hex || entry.swatch || '').trim();
+        }
+        if (Array.isArray(entry.sizes) && entry.sizes.length) {
+          mapped.sizes = entry.sizes.map((size) => String(size || '').trim()).filter(Boolean);
+        }
         if (entry.stock != null && Number.isFinite(Number(entry.stock))) {
           mapped.stock = Number(entry.stock);
         }
+        mapped.available = !(
+          entry.available === false ||
+          entry.inStock === false ||
+          entry.unavailable === true
+        );
       }
       return mapped;
     })
@@ -47,13 +72,19 @@ function mapVariants(entries = []) {
       const size = optionLabel(entry?.size);
       const colour = optionLabel(entry?.colour || entry?.color);
       const price = Number(entry?.price);
-      return {
+      const mapped = {
         size,
         colour,
         price: Number.isFinite(price) ? price : null,
         stock: entry?.stock == null ? null : Number(entry.stock),
         image: entry?.image || '',
       };
+      if (entry?.available === false) {
+        mapped.available = false;
+      } else if (entry?.available === true) {
+        mapped.available = true;
+      }
+      return mapped;
     })
     .filter((entry) => entry.size || entry.colour || entry.price != null);
 }

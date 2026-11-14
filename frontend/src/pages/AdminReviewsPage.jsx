@@ -747,7 +747,7 @@ export default function AdminReviewsPage() {
                     checked={uploadPublished}
                     onChange={(event) => setUploadPublished(event.target.checked)}
                   />
-                  Publish immediately
+                  Publish immediately (homepage placement appears in the public carousel)
                 </label>
               </div>
 

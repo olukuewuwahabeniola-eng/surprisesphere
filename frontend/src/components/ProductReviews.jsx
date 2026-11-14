@@ -21,7 +21,9 @@ function DistributionRow({ stars, count, total }) {
   const percent = total > 0 ? Math.round((count / total) * 100) : 0;
   return (
     <div className="rating-bar-row">
-      <span className="rating-bar-label">{stars} star{stars === 1 ? '' : 's'}</span>
+      <span className="rating-bar-label">
+        {stars} star{stars === 1 ? '' : 's'}
+      </span>
       <div className="rating-bar-track" aria-hidden="true">
         <span style={{ width: `${percent}%` }} />
       </div>
@@ -32,14 +34,9 @@ function DistributionRow({ stars, count, total }) {
   );
 }
 
-export default function ProductReviews({
-  productId,
-  summary,
-  reviews = [],
-  onSubmitted,
-}) {
+export default function ProductReviews({ productId, summary, reviews = [], onSubmitted }) {
   const [formOpen, setFormOpen] = useState(false);
-  const [rating, setRating] = useState(5);
+  const [rating, setRating] = useState(0);
   const [displayName, setDisplayName] = useState('');
   const [body, setBody] = useState('');
   const [busy, setBusy] = useState(false);
@@ -63,6 +60,10 @@ export default function ProductReviews({
 
   async function handleSubmit(event) {
     event.preventDefault();
+    if (!rating || rating < 1 || rating > 5) {
+      setError('Please select a star rating from 1 to 5.');
+      return;
+    }
     setBusy(true);
     setError('');
     setSuccess('');
@@ -79,7 +80,7 @@ export default function ProductReviews({
       );
       setDisplayName('');
       setBody('');
-      setRating(5);
+      setRating(0);
       setFormOpen(false);
       onSubmitted?.(result);
     } catch (err) {
@@ -100,8 +101,14 @@ export default function ProductReviews({
           type="button"
           className="button button-wine button-rect"
           onClick={() => {
-            setFormOpen((open) => !open);
-            setError('');
+            setFormOpen((open) => {
+              const next = !open;
+              if (next) {
+                setRating(0);
+                setError('');
+              }
+              return next;
+            });
           }}
         >
           {formOpen ? 'Close form' : 'Write a Review'}
@@ -129,7 +136,9 @@ export default function ProductReviews({
           ) : (
             <>
               <p className="review-average is-empty">—</p>
-              <p className="review-count-copy">No approved reviews yet. Be the first to share your experience.</p>
+              <p className="review-count-copy">
+                No approved reviews yet. Be the first to share your experience.
+              </p>
             </>
           )}
         </div>
@@ -147,18 +156,25 @@ export default function ProductReviews({
       </div>
 
       {formOpen && (
-        <form className="review-form" onSubmit={handleSubmit}>
+        <form className="review-form" onSubmit={handleSubmit} noValidate>
           <h3>Write a Review</h3>
-          <label>
-            Your rating
+          <div className="review-rating-field">
+            <span className="review-rating-label" id="review-rating-label">
+              Your rating <abbr title="required">*</abbr>
+            </span>
             <StarRating
               value={rating}
               interactive
-              onChange={setRating}
-              size="lg"
+              required
+              showLabel
+              onChange={(next) => {
+                setRating(next);
+                if (error) setError('');
+              }}
+              size="xl"
               label="Choose a star rating"
             />
-          </label>
+          </div>
           <label>
             Display name
             <input
@@ -185,7 +201,7 @@ export default function ProductReviews({
               {error}
             </p>
           )}
-          <button type="submit" className="button button-wine" disabled={busy || rating < 1}>
+          <button type="submit" className="button button-wine" disabled={busy}>
             {busy ? 'Submitting…' : 'Submit Review'}
           </button>
         </form>

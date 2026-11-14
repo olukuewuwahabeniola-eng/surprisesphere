@@ -1,7 +1,9 @@
+import path from 'path';
 import multer from 'multer';
 import { AppError } from '../utils/AppError.js';
 
 const ALLOWED_TYPES = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp']);
+const ALLOWED_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp']);
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const MAX_FILES = 8;
 
@@ -9,11 +11,22 @@ const storage = multer.memoryStorage();
 
 function fileFilter(_req, file, callback) {
   const mime = String(file.mimetype || '').toLowerCase();
-  if (!ALLOWED_TYPES.has(mime)) {
-    callback(new AppError('Only JPG, JPEG, PNG and WebP images are allowed.', 400));
+  const ext = path.extname(String(file.originalname || '')).toLowerCase();
+  const mimeOk = ALLOWED_TYPES.has(mime);
+  const extOk = ALLOWED_EXT.has(ext);
+
+  // Some Windows browsers send an empty MIME type — allow by extension in that case.
+  if (mimeOk || (!mime && extOk) || (mime === 'application/octet-stream' && extOk)) {
+    callback(null, true);
     return;
   }
-  callback(null, true);
+
+  callback(
+    new AppError(
+      `Unsupported image format${mime ? ` (${mime})` : ext ? ` (${ext})` : ''}. Only JPG, JPEG, PNG and WebP images are allowed.`,
+      400,
+    ),
+  );
 }
 
 export const productImageUpload = multer({

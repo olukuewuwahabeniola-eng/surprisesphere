@@ -27,15 +27,17 @@ function readStorage() {
   }
 }
 
-function snapshot(product, { size = '', colour = '', price, image } = {}) {
+function snapshot(product, { size = '', colour = '', price, image, maxStock } = {}) {
   const item = {
     id: product.id,
+    slug: product.slug || '',
     name: product.name,
     price: Number.isFinite(Number(price)) ? Number(price) : product.price,
     image: image || product.image,
-    alt: product.alt,
+    alt: product.alt || product.name || '',
     size: size || '',
     colour: colour || '',
+    maxStock: maxStock == null || maxStock === '' ? null : Number(maxStock),
   };
   return {
     ...item,
@@ -106,22 +108,39 @@ export function ShopProvider({ children }) {
       colour: options.colour || '',
       price: options.price,
       image: options.image,
+      maxStock: options.maxStock,
     });
 
     setBag((current) => {
       const existing = current.cart.find((item) => item.lineKey === next.lineKey);
       const cart = existing
-        ? current.cart.map((item) =>
-            item.lineKey === next.lineKey
-              ? {
-                  ...item,
-                  qty: item.qty + addQty,
-                  price: next.price,
-                  image: next.image,
-                }
-              : item,
-          )
-        : [...current.cart, { ...next, qty: addQty }];
+        ? current.cart.map((item) => {
+            if (item.lineKey !== next.lineKey) {
+              return item;
+            }
+            const combined = item.qty + addQty;
+            const capped =
+              next.maxStock != null && Number.isFinite(next.maxStock)
+                ? Math.min(combined, Math.max(1, next.maxStock))
+                : combined;
+            return {
+              ...item,
+              qty: capped,
+              price: next.price,
+              image: next.image,
+              maxStock: next.maxStock,
+            };
+          })
+        : [
+            ...current.cart,
+            {
+              ...next,
+              qty:
+                next.maxStock != null && Number.isFinite(next.maxStock)
+                  ? Math.min(addQty, Math.max(1, next.maxStock))
+                  : addQty,
+            },
+          ];
       return { ...current, cart };
     });
 
@@ -141,9 +160,16 @@ export function ShopProvider({ children }) {
       cart:
         qty < 1
           ? current.cart.filter((item) => item.lineKey !== lineKey && item.id !== lineKey)
-          : current.cart.map((item) =>
-              item.lineKey === lineKey || item.id === lineKey ? { ...item, qty } : item,
-            ),
+          : current.cart.map((item) => {
+              if (item.lineKey !== lineKey && item.id !== lineKey) {
+                return item;
+              }
+              const nextQty =
+                item.maxStock != null && Number.isFinite(item.maxStock)
+                  ? Math.min(qty, Math.max(1, item.maxStock))
+                  : qty;
+              return { ...item, qty: nextQty };
+            }),
     }));
   }
 

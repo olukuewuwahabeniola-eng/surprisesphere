@@ -343,6 +343,63 @@ export async function createProduct(rawBody = {}) {
   };
 }
 
+/**
+ * Create many products independently. One failure does not roll back successes.
+ */
+export async function createProductsBulk(rawItems = []) {
+  requireDb();
+
+  if (!Array.isArray(rawItems) || rawItems.length === 0) {
+    throw new AppError('Provide at least one product to upload.', 400);
+  }
+  if (rawItems.length > 40) {
+    throw new AppError('Bulk upload is limited to 40 products per request.', 400);
+  }
+
+  const results = [];
+  let created = 0;
+  let failed = 0;
+
+  for (let index = 0; index < rawItems.length; index += 1) {
+    const item = rawItems[index] || {};
+    const clientId = item.clientId || item.tempId || `item-${index + 1}`;
+    const name = String(item.name || '').trim() || `Product ${index + 1}`;
+    try {
+      const { clientId: _c, tempId: _t, ...body } = item;
+      const result = await createProduct(body);
+      created += 1;
+      results.push({
+        index,
+        clientId,
+        name: result.product?.name || name,
+        ok: true,
+        product: result.product,
+        message: 'Product created.',
+      });
+    } catch (error) {
+      failed += 1;
+      results.push({
+        index,
+        clientId,
+        name,
+        ok: false,
+        message: error?.message || 'Could not create product.',
+        statusCode: error?.statusCode || 500,
+      });
+    }
+  }
+
+  return {
+    summary: {
+      total: rawItems.length,
+      created,
+      failed,
+    },
+    results,
+    source: 'mongodb',
+  };
+}
+
 export async function updateProduct(idOrSlug, rawBody = {}) {
   requireDb();
 

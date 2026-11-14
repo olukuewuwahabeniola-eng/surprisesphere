@@ -12,14 +12,26 @@ import {
 } from '../services/api';
 import { formatNaira } from '../utils/money';
 import {
+  colourSwatchHex,
   getAvailableColours,
   getAvailableSizes,
+  getColourOptions,
+  getImagesForColour,
+  getSelectionStock,
+  isSelectionPurchasable,
   resolveProductSelection,
 } from '../utils/productOptions';
 import { trackWhatsAppEnquiry } from '../utils/analytics';
 import { buildWhatsAppProductOrderUrl } from '../utils/whatsappOrder';
 
-function galleryFromProduct(product) {
+function galleryFromProduct(product, colour = '') {
+  const colourImages = getImagesForColour(product, colour).map((url) => ({
+    url,
+    alt: colour ? `${product?.name || ''} — ${colour}` : product?.name || '',
+  }));
+  if (colourImages.length) {
+    return colourImages;
+  }
   const images = Array.isArray(product?.images)
     ? product.images
         .map((entry) => (typeof entry === 'string' ? { url: entry, alt: product.name } : entry))
@@ -49,11 +61,12 @@ export default function ProductDetailPage() {
   const [note, setNote] = useState('');
   const [added, setAdded] = useState(false);
 
-  const gallery = useMemo(() => galleryFromProduct(product), [product]);
-  const sizes = useMemo(() => getAvailableSizes(product), [product]);
-  const [size, setSize] = useState('');
-  const colours = useMemo(() => getAvailableColours(product, size), [product, size]);
+  const colourOptions = useMemo(() => getColourOptions(product), [product]);
   const [colour, setColour] = useState('');
+  const [size, setSize] = useState('');
+  const colours = useMemo(() => getAvailableColours(product), [product]);
+  const sizes = useMemo(() => getAvailableSizes(product, colour), [product, colour]);
+  const gallery = useMemo(() => galleryFromProduct(product, colour), [product, colour]);
 
   useEffect(() => {
     let cancelled = false;
@@ -109,20 +122,33 @@ export default function ProductDetailPage() {
   }, [idOrSlug]);
 
   useEffect(() => {
-    setSize(sizes[0] || '');
-  }, [product?.id, sizes]);
-
-  useEffect(() => {
     if (!colours.includes(colour)) {
       setColour(colours[0] || '');
     }
   }, [colours, colour]);
 
+  useEffect(() => {
+    if (!sizes.includes(size)) {
+      setSize(sizes[0] || '');
+    }
+  }, [sizes, size]);
+
+  useEffect(() => {
+    setActiveImage(0);
+  }, [colour, product?.id]);
+
   const selection = useMemo(() => {
     if (!product) {
-      return { size: '', colour: '', price: 0, image: '' };
+      return { size: '', colour: '', price: 0, image: '', stock: null, available: false };
     }
     return resolveProductSelection(product, { size, colour });
+  }, [product, size, colour]);
+
+  useEffect(() => {
+    const stock = getSelectionStock(product, { size, colour });
+    if (stock != null && Number.isFinite(stock) && stock > 0) {
+      setQty((current) => Math.min(current, stock));
+    }
   }, [product, size, colour]);
 
   if (status === 'loading') {
@@ -146,14 +172,23 @@ export default function ProductDetailPage() {
     );
   }
 
-  const displayImage = selection.image || gallery[activeImage]?.url || product.image || '';
+  const safeIndex = Math.min(activeImage, Math.max(gallery.length - 1, 0));
+  const displayImage =
+    gallery[safeIndex]?.url || selection.image || product.image || '';
   const compareAt = Number(product.compareAtPrice || product.originalPrice || 0);
   const hasDiscount = Number.isFinite(compareAt) && compareAt > Number(selection.price || 0);
   const discountPercent = hasDiscount
     ? Math.round(((compareAt - selection.price) / compareAt) * 100)
     : 0;
-  const stock = Number(product.stock);
-  const inStock = !Number.isFinite(stock) || stock > 0;
+  const selectionStock = getSelectionStock(product, { size: selection.size, colour: selection.colour });
+  const inStock = isSelectionPurchasable(product, {
+    size: selection.size,
+    colour: selection.colour,
+  });
+  const maxQty =
+    selectionStock != null && Number.isFinite(selectionStock)
+      ? Math.max(1, selectionStock)
+      : null;
   const wished = isWished(product.id);
 
   const whatsappUrl = buildWhatsAppProductOrderUrl(store?.whatsappNumber, {
@@ -175,13 +210,18 @@ export default function ProductDetailPage() {
       setNote('Choose a colour first.');
       return;
     }
+    if (!inStock) {
+      setNote('That colour/size combination is unavailable.');
+      return;
+    }
     setNote('');
     addToCart(product, {
       size: selection.size,
       colour: selection.colour,
       price: selection.price,
       image: displayImage,
-      qty,
+      qty: maxQty != null ? Math.min(qty, maxQty) : qty,
+      maxStock: selectionStock,
     });
     setAdded(true);
     setCartOpen(true);
@@ -218,7 +258,7 @@ export default function ProductDetailPage() {
         <div className="product-detail-layout">
           <div className="product-gallery">
             <div className="product-gallery-main">
-              <img src={displayImage} alt={gallery[activeImage]?.alt || product.alt || product.name} />
+              <img src={displayImage} alt={gallery[safeIndex]?.alt || product.alt || product.name} />
             </div>
             {gallery.length > 1 && (
               <div className="product-gallery-thumbs" role="list">
@@ -285,11 +325,30 @@ export default function ProductDetailPage() {
                 )}
                 {colours.length > 0 && (
                   <fieldset>
-                    <legend>Colour</legend>
+                    <legend>Colour{colour ? `: ${colour}` : ''}</legend>
+                    <div className="product-swatches product-swatches-lg" role="listbox" aria-label="Available colours">
+                      {colours.map((entry) => {
+                        const option = colourOptions.find((item) => item.label === entry);
+                        return (
+                          <button
+                            key={entry}
+                            type="button"
+                            role="option"
+                            aria-selected={colour === entry}
+                            className={`product-swatch${colour === entry ? ' is-selected' : ''}`}
+                            title={entry}
+                            style={{ background: colourSwatchHex(entry, option?.hex) }}
+                            onClick={() => setColour(entry)}
+                          >
+                            <span className="sr-only">{entry}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
                     <div className="option-chip-row">
                       {colours.map((entry) => (
                         <button
-                          key={entry}
+                          key={`chip-${entry}`}
                           type="button"
                           className={colour === entry ? 'option-chip is-active' : 'option-chip'}
                           onClick={() => setColour(entry)}
@@ -310,6 +369,7 @@ export default function ProductDetailPage() {
                   type="button"
                   aria-label="Decrease quantity"
                   onClick={() => setQty((current) => Math.max(1, current - 1))}
+                  disabled={!inStock}
                 >
                   −
                 </button>
@@ -317,7 +377,12 @@ export default function ProductDetailPage() {
                 <button
                   type="button"
                   aria-label="Increase quantity"
-                  onClick={() => setQty((current) => current + 1)}
+                  onClick={() =>
+                    setQty((current) =>
+                      maxQty != null ? Math.min(maxQty, current + 1) : current + 1,
+                    )
+                  }
+                  disabled={!inStock || (maxQty != null && qty >= maxQty)}
                 >
                   +
                 </button>
@@ -326,8 +391,8 @@ export default function ProductDetailPage() {
 
             <p className={inStock ? 'product-stock is-in' : 'product-stock is-out'}>
               {inStock
-                ? Number.isFinite(stock) && stock > 0
-                  ? `${stock} in stock`
+                ? selectionStock != null && selectionStock > 0
+                  ? `${selectionStock} in stock${selection.colour ? ` · ${selection.colour}` : ''}${selection.size ? ` · size ${selection.size}` : ''}`
                   : 'Available to order'
                 : 'Currently unavailable'}
             </p>
@@ -343,7 +408,7 @@ export default function ProductDetailPage() {
               >
                 {added ? 'Added to bag' : 'Add to Cart'}
               </button>
-              {whatsappUrl ? (
+              {whatsappUrl && inStock ? (
                 <a
                   className="button button-cream"
                   href={whatsappUrl}
@@ -370,7 +435,7 @@ export default function ProductDetailPage() {
                 </a>
               ) : (
                 <button type="button" className="button button-cream" disabled>
-                  WhatsApp unavailable
+                  {inStock ? 'WhatsApp unavailable' : 'Unavailable'}
                 </button>
               )}
               <button

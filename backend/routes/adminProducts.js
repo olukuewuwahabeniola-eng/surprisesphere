@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   createAdminProductHandler,
+  createAdminProductsBulkHandler,
   deleteAdminProductHandler,
   getAdminProductHandler,
   listAdminProductsHandler,
@@ -14,6 +15,7 @@ const router = Router();
 router.use(requireAdmin);
 
 router.get('/', asyncHandler(listAdminProductsHandler));
+router.post('/bulk', asyncHandler(createAdminProductsBulkHandler));
 router.post('/', asyncHandler(createAdminProductHandler));
 router.get('/:idOrSlug', asyncHandler(getAdminProductHandler));
 router.put('/:idOrSlug', asyncHandler(updateAdminProductHandler));

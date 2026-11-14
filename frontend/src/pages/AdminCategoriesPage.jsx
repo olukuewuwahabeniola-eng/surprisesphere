@@ -10,6 +10,7 @@ import {
   uploadAdminImages,
 } from '../services/api';
 import { getStoredAdminKey } from '../utils/adminAuth';
+import { validateImageFiles } from '../utils/imageUpload';
 
 const PAGE_SIZE = 50;
 
@@ -193,12 +194,9 @@ export default function AdminCategoriesPage() {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    if (!['image/jpeg', 'image/jpg', 'image/png', 'image/webp'].includes(file.type)) {
-      setError('Only JPG, PNG and WebP images are allowed.');
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      setError('Each image must be 5MB or smaller.');
+    const check = validateImageFiles([file]);
+    if (!check.ok) {
+      setError(check.message);
       return;
     }
 

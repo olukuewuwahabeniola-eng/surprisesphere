@@ -115,6 +115,20 @@ export function createAdminProduct(adminKey, payload) {
     .then((response) => response.data);
 }
 
+export function createAdminProductsBulk(adminKey, products) {
+  return api
+    .post(
+      '/api/admin/products/bulk',
+      { products },
+      {
+        headers: adminHeaders(adminKey),
+        timeout: 180000,
+        validateStatus: (status) => (status >= 200 && status < 300) || status === 400,
+      },
+    )
+    .then((response) => response.data);
+}
+
 export function updateAdminProduct(adminKey, idOrSlug, payload) {
   return api
     .patch(`/api/admin/products/${idOrSlug}`, payload, {
@@ -179,17 +193,32 @@ export function reorderAdminCategories(adminKey, orderedIds) {
 export function uploadAdminImages(adminKey, files, { onUploadProgress } = {}) {
   const formData = new FormData();
   const list = Array.from(files || []);
+  if (!list.length) {
+    return Promise.reject(new Error('Choose at least one image file to upload.'));
+  }
   list.forEach((file) => {
-    formData.append('images', file);
+    formData.append('images', file, file.name || 'image.jpg');
   });
 
   return api
     .post('/api/admin/uploads/images', formData, {
-      headers: adminHeaders(adminKey),
+      headers: {
+        ...adminHeaders(adminKey),
+        // Let the browser set multipart boundary — never force JSON here.
+        'Content-Type': undefined,
+      },
       timeout: 120000,
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity,
       onUploadProgress,
     })
-    .then((response) => response.data);
+    .then((response) => {
+      const images = response?.data?.images;
+      if (!Array.isArray(images) || images.length === 0) {
+        throw new Error('Server rejected the upload: no image URLs were returned.');
+      }
+      return response.data;
+    });
 }
 
 export function listAdminReviews(adminKey, params = {}) {
@@ -375,11 +404,26 @@ export function readError(error, fallback) {
   if (error?.response?.data?.message) {
     return error.response.data.message;
   }
+  if (error?.code === 'ECONNABORTED' || /timeout/i.test(String(error?.message || ''))) {
+    return 'Network connection interrupted or timed out while uploading. Check your connection and try again.';
+  }
   if (error?.code === 'ERR_NETWORK' || error?.message === 'Network Error') {
-    return 'The shop API could not be reached. Check that the backend is deployed and reachable.';
+    return 'Network connection interrupted. Check that the backend is running and reachable.';
+  }
+  if (error?.response?.status === 401) {
+    return 'Authentication failed. Unlock admin with a valid admin key, then try again.';
+  }
+  if (error?.response?.status === 413) {
+    return 'Server rejected the upload because the image is too large.';
+  }
+  if (error?.response?.status === 502 || error?.response?.status === 503) {
+    return 'Cloudinary upload failed or the upload service is unavailable. Try again shortly.';
   }
   if (error?.response?.status === 404) {
-    return 'The shop API route was not found. The backend may not be connected to this deployment.';
+    return 'The upload API route was not found. The backend may not be connected to this deployment.';
+  }
+  if (error?.message && error.message !== 'Network Error') {
+    return error.message;
   }
   return fallback;
 }

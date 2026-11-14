@@ -12,6 +12,8 @@ export default function HomePage() {
   const { catalog, status, catalogError, loadCatalog } = useShop();
   const location = useLocation();
   const [testimonials, setTestimonials] = useState([]);
+  const [testimonialStatus, setTestimonialStatus] = useState('idle');
+  const [testimonialError, setTestimonialError] = useState('');
 
   useEffect(() => {
     if (status !== 'ready' || !location.hash) {
@@ -28,15 +30,20 @@ export default function HomePage() {
       return undefined;
     }
     let cancelled = false;
-    getReviewPhotos({ placement: 'homepage', pageSize: 12 })
+    setTestimonialStatus('loading');
+    setTestimonialError('');
+    getReviewPhotos({ placement: 'homepage', pageSize: 24 })
       .then((data) => {
         if (!cancelled) {
           setTestimonials(data.photos || []);
+          setTestimonialStatus('ready');
         }
       })
       .catch(() => {
         if (!cancelled) {
           setTestimonials([]);
+          setTestimonialStatus('error');
+          setTestimonialError('Customer moments could not be loaded right now.');
         }
       });
     return () => {
@@ -94,6 +101,13 @@ export default function HomePage() {
         photos={testimonials}
         title="Loved by Our Customers"
         eyebrow="WhatsApp moments"
+        loading={testimonialStatus === 'loading'}
+        errorMessage={testimonialStatus === 'error' ? testimonialError : ''}
+        emptyMessage={
+          testimonialStatus === 'ready'
+            ? 'Customer WhatsApp moments will appear here once published in Admin → Reviews & Testimonials.'
+            : ''
+        }
       />
       <PromoBanners promos={catalog.promos} />
     </>
