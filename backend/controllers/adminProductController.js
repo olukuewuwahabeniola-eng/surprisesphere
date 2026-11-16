@@ -1,4 +1,3 @@
-import { isDbConnected } from '../config/db.js';
 import {
   createProduct,
   createProductsBulk,
@@ -7,16 +6,8 @@ import {
   listAdminProducts,
   updateProduct,
 } from '../services/productService.js';
+import { assertMongoReady } from '../utils/assertMongo.js';
 import { AppError } from '../utils/AppError.js';
-
-function assertMongoForAdminWrite() {
-  if (!isDbConnected()) {
-    throw new AppError(
-      'MongoDB must be connected to manage products. Start MongoDB and set MONGO_URI, then try again.',
-      503,
-    );
-  }
-}
 
 function stripSecrets(body = {}) {
   const next = { ...body };
@@ -25,7 +16,9 @@ function stripSecrets(body = {}) {
 }
 
 export async function listAdminProductsHandler(req, res) {
-  assertMongoForAdminWrite();
+  await assertMongoReady(
+    'MongoDB must be connected to manage products. Start MongoDB and set MONGO_URI, then try again.',
+  );
   const result = await listAdminProducts(req.query || {});
   res.json({
     title: 'Admin products',
@@ -35,13 +28,17 @@ export async function listAdminProductsHandler(req, res) {
 }
 
 export async function getAdminProductHandler(req, res) {
-  assertMongoForAdminWrite();
+  await assertMongoReady(
+    'MongoDB must be connected to manage products. Start MongoDB and set MONGO_URI, then try again.',
+  );
   const result = await getAdminProductByIdOrSlug(req.params.idOrSlug);
   res.json(result);
 }
 
 export async function createAdminProductHandler(req, res) {
-  assertMongoForAdminWrite();
+  await assertMongoReady(
+    'MongoDB must be connected to manage products. Start MongoDB and set MONGO_URI, then try again.',
+  );
   const result = await createProduct(stripSecrets(req.body || {}));
   res.status(201).json({
     message: 'Product created.',
@@ -50,7 +47,9 @@ export async function createAdminProductHandler(req, res) {
 }
 
 export async function createAdminProductsBulkHandler(req, res) {
-  assertMongoForAdminWrite();
+  await assertMongoReady(
+    'MongoDB must be connected to manage products. Start MongoDB and set MONGO_URI, then try again.',
+  );
   const body = stripSecrets(req.body || {});
   const items = Array.isArray(body.products)
     ? body.products
@@ -76,7 +75,9 @@ export async function createAdminProductsBulkHandler(req, res) {
 }
 
 export async function updateAdminProductHandler(req, res) {
-  assertMongoForAdminWrite();
+  await assertMongoReady(
+    'MongoDB must be connected to manage products. Start MongoDB and set MONGO_URI, then try again.',
+  );
   const result = await updateProduct(req.params.idOrSlug, stripSecrets(req.body || {}));
   res.json({
     message: 'Product updated.',
@@ -85,7 +86,9 @@ export async function updateAdminProductHandler(req, res) {
 }
 
 export async function deleteAdminProductHandler(req, res) {
-  assertMongoForAdminWrite();
+  await assertMongoReady(
+    'MongoDB must be connected to manage products. Start MongoDB and set MONGO_URI, then try again.',
+  );
   const result = await deleteProduct(req.params.idOrSlug);
   res.json(result);
 }

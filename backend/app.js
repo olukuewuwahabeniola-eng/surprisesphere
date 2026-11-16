@@ -8,23 +8,9 @@ import { errorHandler } from './middleware/errorHandler.js';
 import { notFound } from './middleware/notFound.js';
 import apiRoutes from './routes/index.js';
 
-let connectionPromise;
-
 export function ensureDb() {
-  if (isDbConnected()) {
-    return Promise.resolve(true);
-  }
-
-  // Retry after a failed attempt — do not permanently cache a dead connection.
-  if (!connectionPromise) {
-    connectionPromise = connectDB().finally(() => {
-      if (!isDbConnected()) {
-        connectionPromise = null;
-      }
-    });
-  }
-
-  return connectionPromise;
+  // Single-flight connect. Background reconnect + admin assertMongoReady handle recovery.
+  return connectDB();
 }
 
 function parseAllowedOrigins() {

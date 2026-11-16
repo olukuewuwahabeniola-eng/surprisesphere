@@ -11,7 +11,7 @@ export default function PromoBanners({ promos }) {
             data-reveal
             style={{ '--reveal-delay': `${index * 90}ms` }}
           >
-            <img src={promo.image} alt={promo.alt} />
+            <img src={promo.image} alt={promo.alt} loading="lazy" decoding="async" />
             <div className="promo-copy">
               <h2>{promo.title}</h2>
               <p>{promo.kicker}</p>

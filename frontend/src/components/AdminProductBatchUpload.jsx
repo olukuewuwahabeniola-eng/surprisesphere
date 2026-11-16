@@ -1,14 +1,28 @@
 import { useMemo, useState } from 'react';
-import { createAdminProduct, readError } from '../services/api';
+import { createAdminProduct, readError, uploadAdminImages } from '../services/api';
 import {
+  blankColourVariant,
   blankProductDraft,
   draftToProductPayload,
   validateProductDraft,
 } from '../utils/adminProductDraft';
+import { validateImageFiles } from '../utils/imageUpload';
 import { formatNaira } from '../utils/money';
-import AdminColourVariantsEditor from './AdminColourVariantsEditor';
+import { colourSwatchHex } from '../utils/productOptions';
+import AdminColourPalette from './AdminColourPalette';
+import AdminProductPlacement from './AdminProductPlacement';
+import AdminSizeSelector from './AdminSizeSelector';
 
-const STEPS = ['category', 'workspace', 'review', 'results'];
+const STAGES = [
+  { id: 'details', label: 'Product Details', hint: 'Name, category and pricing' },
+  { id: 'variants', label: 'Variants', hint: 'Colours and optional sizes' },
+  { id: 'images', label: 'Images', hint: 'Photos for each colour' },
+  { id: 'review', label: 'Review', hint: 'Confirm and save' },
+];
+
+function stageIndex(id) {
+  return STAGES.findIndex((stage) => stage.id === id);
+}
 
 export default function AdminProductBatchUpload({
   categories = [],
@@ -21,206 +35,247 @@ export default function AdminProductBatchUpload({
     [categories],
   );
 
-  const [step, setStep] = useState('category');
-  const [categoryId, setCategoryId] = useState('');
-  const [drafts, setDrafts] = useState([]);
+  const [stage, setStage] = useState('details');
+  const [draft, setDraft] = useState(() => blankProductDraft({ stock: '', expanded: true }));
   const [busy, setBusy] = useState(false);
+  const [uploadingColourId, setUploadingColourId] = useState('');
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState('');
-  const [validationIssues, setValidationIssues] = useState([]);
-  const [results, setResults] = useState([]);
-  const [submitProgress, setSubmitProgress] = useState({ current: 0, total: 0, label: '' });
+  const [dragOverId, setDragOverId] = useState('');
 
-  const selectedCategory = activeCategories.find((category) => category.id === categoryId);
+  const selectedCategory = activeCategories.find(
+    (category) => category.slug === draft.category || category.id === draft.category,
+  );
+  const previewColour = draft.colours.find((colour) => colour.images?.length) || draft.colours[0];
+  const previewImage =
+    previewColour?.images?.[previewColour.mainIndex || 0] || previewColour?.images?.[0] || '';
+  const totalImages = draft.colours.reduce((sum, colour) => sum + (colour.images?.length || 0), 0);
+  const currentStage = stageIndex(stage);
 
-  function startWorkspace(nextCategoryId) {
-    const category = activeCategories.find((entry) => entry.id === nextCategoryId);
-    if (!category) {
-      setError('Choose a category to continue.');
-      return;
-    }
-    setCategoryId(nextCategoryId);
-    setDrafts([
-      blankProductDraft({
-        category: category.id,
-        categoryLabel: category.name,
-        expanded: true,
-      }),
-    ]);
-    setError('');
-    setValidationIssues([]);
-    setStep('workspace');
+  function patchDraft(patch) {
+    setDraft((current) => ({ ...current, ...patch }));
   }
 
-  function updateDraft(clientId, patch) {
-    setDrafts((current) =>
-      current.map((draft) => (draft.clientId === clientId ? { ...draft, ...patch } : draft)),
+  function patchColour(colourId, patch) {
+    setDraft((current) => ({
+      ...current,
+      colours: current.colours.map((colour) =>
+        colour.id === colourId ? { ...colour, ...patch } : colour,
+      ),
+    }));
+  }
+
+  function syncColoursFromSelection(nextSelected) {
+    setDraft((current) => {
+      const byLabel = new Map(
+        current.colours.map((colour) => [String(colour.label || '').trim().toLowerCase(), colour]),
+      );
+      const colours = nextSelected.map((entry) => {
+        const existing = byLabel.get(entry.label.toLowerCase());
+        if (existing) {
+          return {
+            ...existing,
+            label: entry.label,
+            hex: entry.hex || existing.hex || colourSwatchHex(entry.label),
+          };
+        }
+        return blankColourVariant({
+          label: entry.label,
+          hex: entry.hex || colourSwatchHex(entry.label),
+          sizes: [...(current.sizes || [])],
+        });
+      });
+      return { ...current, colours };
+    });
+  }
+
+  function toggleColour(colour) {
+    const key = colour.label.toLowerCase();
+    const selected = draft.colours
+      .filter((entry) => entry.label)
+      .map((entry) => ({ label: entry.label, hex: entry.hex || colourSwatchHex(entry.label) }));
+    const exists = selected.some((entry) => entry.label.toLowerCase() === key);
+    syncColoursFromSelection(
+      exists
+        ? selected.filter((entry) => entry.label.toLowerCase() !== key)
+        : [...selected, colour],
     );
   }
 
-  function addProduct() {
-    if (!selectedCategory) return;
-    setDrafts((current) => [
-      ...current.map((draft) => ({ ...draft, expanded: false })),
-      blankProductDraft({
-        category: selectedCategory.id,
-        categoryLabel: selectedCategory.name,
-        expanded: true,
-      }),
-    ]);
+  function applySharedSizesToAll() {
+    setDraft((current) => ({
+      ...current,
+      colours: current.colours.map((colour) => ({
+        ...colour,
+        sizes: [...(current.sizes || [])],
+      })),
+    }));
   }
 
-  function removeProduct(clientId) {
-    setDrafts((current) => {
-      const next = current.filter((draft) => draft.clientId !== clientId);
-      return next.length
-        ? next
-        : [
-            blankProductDraft({
-              category: selectedCategory?.id || categoryId,
-              categoryLabel: selectedCategory?.name || '',
-              expanded: true,
-            }),
-          ];
-    });
-  }
-
-  function goToReview() {
-    const issues = [];
-    drafts.forEach((draft, index) => {
-      const errors = validateProductDraft(draft);
-      errors.forEach((message) => {
-        issues.push({
-          clientId: draft.clientId,
-          index: index + 1,
-          name: draft.name || 'Untitled',
-          message,
-        });
-      });
-    });
-    if (issues.length) {
-      setValidationIssues(issues);
-      setError(`Fix ${issues.length} issue${issues.length === 1 ? '' : 's'} before submitting.`);
-      const firstId = issues[0]?.clientId;
-      if (firstId) {
-        setDrafts((current) =>
-          current.map((draft) => ({ ...draft, expanded: draft.clientId === firstId })),
-        );
-      }
+  async function uploadFilesToColour(colourId, fileList) {
+    const check = validateImageFiles(fileList);
+    if (!check.ok) {
+      setError(check.message);
       return;
     }
-    setValidationIssues([]);
+    if (!adminKey) {
+      setError('Authentication failed. Unlock admin with a valid admin key, then try again.');
+      return;
+    }
+
     setError('');
-    setStep('review');
+    setUploadingColourId(colourId);
+    setUploadProgress(0);
+    try {
+      const urls = [];
+      const files = check.files;
+      for (let start = 0; start < files.length; start += 8) {
+        const chunk = files.slice(start, start + 8);
+        const result = await uploadAdminImages(adminKey, chunk, {
+          onUploadProgress: (event) => {
+            if (!event.total) return;
+            const base = (start / files.length) * 100;
+            const portion = (event.loaded / event.total) * (chunk.length / files.length) * 100;
+            setUploadProgress(Math.min(99, Math.round(base + portion)));
+          },
+        });
+        (result.images || []).forEach((image) => {
+          if (image?.url) urls.push(image.url);
+        });
+      }
+      if (!urls.length) {
+        throw new Error('The server did not return any image URLs.');
+      }
+      setDraft((current) => ({
+        ...current,
+        colours: current.colours.map((colour) => {
+          if (colour.id !== colourId) return colour;
+          const images = [...(colour.images || []), ...urls];
+          return {
+            ...colour,
+            images,
+            mainIndex: colour.images?.length ? colour.mainIndex : 0,
+          };
+        }),
+      }));
+      setUploadProgress(100);
+    } catch (err) {
+      setError(readError(err, 'Could not upload colour images.'));
+    } finally {
+      setUploadingColourId('');
+      window.setTimeout(() => setUploadProgress(0), 500);
+    }
   }
 
-  async function submitBatch() {
+  function validateStage(target = stage) {
+    if (target === 'details') {
+      if (!String(draft.name || '').trim()) return 'Product name is required.';
+      if (!String(draft.category || '').trim()) return 'Choose a category.';
+      if (!Number.isFinite(Number(draft.price)) || Number(draft.price) < 0) {
+        return 'Enter a valid base price.';
+      }
+      return '';
+    }
+    if (target === 'variants') {
+      if (!draft.colours.some((colour) => String(colour.label || '').trim())) {
+        return 'Select at least one colour.';
+      }
+      return '';
+    }
+    if (target === 'images' || target === 'review') {
+      const issues = validateProductDraft({
+        ...draft,
+        category: draft.category || selectedCategory?.id || '',
+      });
+      return issues[0] || '';
+    }
+    return '';
+  }
+
+  function goNext() {
+    const message = validateStage(stage);
+    if (message) {
+      setError(message);
+      return;
+    }
+    setError('');
+    const next = STAGES[Math.min(currentStage + 1, STAGES.length - 1)];
+    setStage(next.id);
+  }
+
+  function goBack() {
+    setError('');
+    const prev = STAGES[Math.max(currentStage - 1, 0)];
+    setStage(prev.id);
+  }
+
+  async function saveProduct({ addAnother = false } = {}) {
+    const message = validateStage('review');
+    if (message) {
+      setError(message);
+      setStage('images');
+      return;
+    }
+    if (busy) return;
+
     setBusy(true);
     setError('');
-    const pending = drafts.filter((draft) => !draft.createdProductId);
-    const outcome = [];
-    setSubmitProgress({ current: 0, total: pending.length, label: 'Starting…' });
-
-    for (const draft of drafts) {
-      if (draft.createdProductId) {
-        outcome.push({
-          clientId: draft.clientId,
-          name: draft.name,
-          ok: true,
-          message: 'Already uploaded in this session.',
-          skipped: true,
-        });
-        continue;
-      }
-
-      const position = outcome.filter((entry) => !entry.skipped).length + 1;
-      setSubmitProgress({
-        current: position,
-        total: pending.length,
-        label: draft.name || `Product ${position}`,
-      });
-      updateDraft(draft.clientId, { uploadStatus: 'uploading', uploadError: '' });
-
-      try {
-        const payload = draftToProductPayload(draft);
-        const result = await createAdminProduct(adminKey, payload);
-        const createdId = result?.product?.id || '';
-        updateDraft(draft.clientId, {
-          uploadStatus: 'success',
-          createdProductId: createdId,
-          uploadError: '',
-        });
-        outcome.push({
-          clientId: draft.clientId,
-          name: draft.name,
-          ok: true,
-          message: result?.message || 'Uploaded.',
-          productId: createdId,
-        });
-      } catch (err) {
-        const message = readError(err, 'Upload failed.');
-        updateDraft(draft.clientId, { uploadStatus: 'error', uploadError: message });
-        outcome.push({
-          clientId: draft.clientId,
-          name: draft.name,
-          ok: false,
-          message,
-        });
-      }
-    }
-
-    setResults(outcome);
-    setBusy(false);
-    setSubmitProgress({ current: 0, total: 0, label: '' });
-    setStep('results');
-    if (outcome.some((entry) => entry.ok && !entry.skipped)) {
-      onCompleted?.();
-    }
-  }
-
-  async function retryFailed() {
-    const failed = drafts.filter((draft) => !draft.createdProductId);
-    setDrafts(
-      failed.map((draft) => ({
+    try {
+      const payload = draftToProductPayload({
         ...draft,
-        uploadStatus: 'idle',
-        uploadError: '',
-        expanded: true,
-      })),
-    );
-    setResults([]);
-    setStep('review');
+        category: draft.category || selectedCategory?.id,
+        categoryLabel: selectedCategory?.name || draft.categoryLabel,
+      });
+      await createAdminProduct(adminKey, payload);
+      onCompleted?.();
+      if (addAnother) {
+        // Start a fresh product so category/placement never leak across bulk session items.
+        setDraft(blankProductDraft({ stock: '', expanded: true }));
+        setStage('details');
+        setError('');
+        return;
+      }
+      onClose?.();
+    } catch (err) {
+      setError(readError(err, 'Could not save the product.'));
+    } finally {
+      setBusy(false);
+    }
   }
 
-  const readyCount = drafts.filter((draft) => validateProductDraft(draft).length === 0).length;
-  const successCount = results.filter((entry) => entry.ok).length;
-  const failedCount = results.filter((entry) => !entry.ok).length;
-  const progressPercent =
-    submitProgress.total > 0
-      ? Math.round((Math.max(submitProgress.current - 1, 0) / submitProgress.total) * 100)
-      : 0;
+  const selectedForPalette = draft.colours
+    .filter((colour) => colour.label)
+    .map((colour) => ({
+      label: colour.label,
+      hex: colour.hex || colourSwatchHex(colour.label),
+    }));
 
   return (
-    <section className="admin-panel admin-batch-upload" aria-label="Upload products">
-      <div className="admin-panel-head">
+    <section className="admin-upload-studio" aria-label="Add new product">
+      <div className="admin-upload-studio-head">
         <div>
-          <h2>Upload Products</h2>
-          <p className="admin-muted">
-            Prepare multiple different products in one session — each with its own pictures,
-            colours, sizes and stock — then submit together.
-          </p>
+          <p className="eyebrow">Admin · Products</p>
+          <h2>Add New Product</h2>
+          <p>Create one parent product with colour variants, images, stock and optional sizes.</p>
         </div>
         <button type="button" className="button button-wine button-rect" onClick={onClose} disabled={busy}>
-          Back to products
+          Back to Products
         </button>
       </div>
 
-      <ol className="admin-batch-steps" aria-label="Upload steps">
-        {STEPS.map((entry) => (
-          <li key={entry} className={step === entry ? 'is-active' : ''}>
-            {entry === 'category' && '1. Category'}
-            {entry === 'workspace' && '2. Products'}
-            {entry === 'review' && '3. Review'}
-            {entry === 'results' && '4. Results'}
+      <ol className="admin-upload-steps" aria-label="Upload stages">
+        {STAGES.map((entry, index) => (
+          <li
+            key={entry.id}
+            className={`${index === currentStage ? 'is-active' : ''} ${index < currentStage ? 'is-done' : ''}`}
+          >
+            <button type="button" onClick={() => setStage(entry.id)} disabled={busy}>
+              <span className="admin-upload-step-index">{index + 1}</span>
+              <span>
+                <strong>{entry.label}</strong>
+                <small>{entry.hint}</small>
+              </span>
+            </button>
           </li>
         ))}
       </ol>
@@ -231,352 +286,529 @@ export default function AdminProductBatchUpload({
         </p>
       ) : null}
 
-      {validationIssues.length > 0 && step === 'workspace' ? (
-        <ul className="admin-batch-issues" aria-label="Validation issues">
-          {validationIssues.map((issue) => (
-            <li key={`${issue.clientId}-${issue.message}`}>
-              <button
-                type="button"
-                className="text-button"
-                onClick={() =>
-                  setDrafts((current) =>
-                    current.map((draft) => ({
-                      ...draft,
-                      expanded: draft.clientId === issue.clientId,
-                    })),
-                  )
-                }
-              >
-                Product {issue.index} ({issue.name}): {issue.message}
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-
-      {step === 'category' ? (
-        <div className="admin-batch-category">
-          <h3>What would you like to upload?</h3>
-          <p>Choose a category from your catalogue. New categories added in Admin → Categories appear here automatically.</p>
-          {activeCategories.length === 0 ? (
-            <p className="admin-empty">No active categories yet. Create one in Categories first.</p>
-          ) : (
-            <div className="admin-category-pick-grid">
-              {activeCategories.map((category) => (
-                <button
-                  key={category.id}
-                  type="button"
-                  className={`admin-category-pick${categoryId === category.id ? ' is-selected' : ''}`}
-                  onClick={() => startWorkspace(category.id)}
-                >
-                  {category.image ? <img src={category.image} alt="" /> : <span className="admin-category-fallback" />}
-                  <strong>{category.name}</strong>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      ) : null}
-
-      {step === 'workspace' ? (
-        <div className="admin-batch-workspace">
-          <div className="admin-batch-workspace-head">
-            <div>
-              <p className="eyebrow">{selectedCategory?.name || 'Category'}</p>
-              <h3>Product Upload Workspace</h3>
-              <p>
-                {drafts.length} product{drafts.length === 1 ? '' : 's'} in this session · {readyCount}{' '}
-                ready to submit
-              </p>
-            </div>
-            <div className="admin-batch-workspace-actions">
-              <button type="button" className="button button-wine button-rect" onClick={addProduct}>
-                Add New Product
-              </button>
-              <button type="button" className="button button-wine button-rect" onClick={() => setStep('category')}>
-                Change category
-              </button>
-            </div>
-          </div>
-
-          <div className="admin-batch-product-list">
-            {drafts.map((draft, index) => {
-              const draftErrors = validateProductDraft(draft);
-              const previewImage =
-                draft.colours?.find((colour) => colour.images?.length)?.images?.[0] || '';
-              return (
-                <article
-                  key={draft.clientId}
-                  className={`admin-batch-product${draft.expanded ? ' is-open' : ''}`}
-                >
-                  <header className="admin-batch-product-head">
-                    <button
-                      type="button"
-                      className="admin-batch-toggle"
-                      onClick={() => updateDraft(draft.clientId, { expanded: !draft.expanded })}
-                    >
-                      <span className="admin-batch-toggle-main">
-                        {previewImage ? (
-                          <img src={previewImage} alt="" className="admin-batch-thumb" />
-                        ) : (
-                          <span className="admin-batch-thumb is-empty" aria-hidden="true" />
-                        )}
-                        <span>
-                          Product {index + 1}
-                          {draft.name ? `: ${draft.name}` : ''}
-                          {draftErrors.length ? (
-                            <span className="admin-batch-ready is-warn"> Needs attention</span>
-                          ) : (
-                            <span className="admin-batch-ready is-ok"> Ready</span>
-                          )}
-                        </span>
-                      </span>
-                      <span aria-hidden="true">{draft.expanded ? '−' : '+'}</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="text-button admin-danger"
-                      onClick={() => removeProduct(draft.clientId)}
-                    >
-                      Remove
-                    </button>
-                  </header>
-
-                  {draft.expanded ? (
-                    <div className="admin-batch-product-body">
-                      <div className="admin-batch-fields">
-                        <label className="admin-field">
-                          <span>
-                            Product name <abbr title="required">*</abbr>
-                          </span>
-                          <input
-                            value={draft.name}
-                            onChange={(event) => updateDraft(draft.clientId, { name: event.target.value })}
-                            placeholder="e.g. Classic Ladies Handbag"
-                          />
-                        </label>
-                        <label className="admin-field">
-                          <span>
-                            Price (₦) <abbr title="required">*</abbr>
-                          </span>
-                          <input
-                            type="number"
-                            min="0"
-                            value={draft.price}
-                            onChange={(event) => updateDraft(draft.clientId, { price: event.target.value })}
-                            placeholder="35000"
-                          />
-                        </label>
-                        <label className="admin-field">
-                          <span>Category</span>
-                          <input value={draft.categoryLabel || selectedCategory?.name || ''} disabled readOnly />
-                        </label>
-                        <label className="admin-field">
-                          <span>Overall stock fallback</span>
-                          <input
-                            type="number"
-                            min="0"
-                            value={draft.stock}
-                            onChange={(event) => updateDraft(draft.clientId, { stock: event.target.value })}
-                          />
-                        </label>
-                        <label className="admin-field admin-batch-full">
-                          <span>Description</span>
-                          <textarea
-                            rows={4}
-                            value={draft.description}
-                            onChange={(event) =>
-                              updateDraft(draft.clientId, { description: event.target.value })
-                            }
-                            placeholder="Fit, material, styling notes…"
-                          />
-                        </label>
-                      </div>
-
-                      <div className="admin-check-row">
-                        <label className="admin-check">
-                          <input
-                            type="checkbox"
-                            checked={draft.bestSeller}
-                            onChange={(event) =>
-                              updateDraft(draft.clientId, { bestSeller: event.target.checked })
-                            }
-                          />
-                          Best Seller
-                        </label>
-                        <label className="admin-check">
-                          <input
-                            type="checkbox"
-                            checked={draft.newArrival}
-                            onChange={(event) =>
-                              updateDraft(draft.clientId, { newArrival: event.target.checked })
-                            }
-                          />
-                          New Arrival
-                        </label>
-                        <label className="admin-check">
-                          <input
-                            type="checkbox"
-                            checked={draft.featured}
-                            onChange={(event) =>
-                              updateDraft(draft.clientId, { featured: event.target.checked })
-                            }
-                          />
-                          Featured
-                        </label>
-                        <label className="admin-check">
-                          <input
-                            type="checkbox"
-                            checked={draft.active}
-                            onChange={(event) =>
-                              updateDraft(draft.clientId, { active: event.target.checked })
-                            }
-                          />
-                          Publish immediately
-                        </label>
-                      </div>
-
-                      <AdminColourVariantsEditor
-                        colours={draft.colours}
-                        sharedSizes={draft.sizes || []}
-                        adminKey={adminKey}
-                        productName={draft.name}
-                        onChange={(colours) => updateDraft(draft.clientId, { colours })}
-                        onSharedSizesChange={(sizes) => updateDraft(draft.clientId, { sizes })}
-                      />
-                    </div>
-                  ) : null}
-                </article>
-              );
-            })}
-          </div>
-
-          <div className="admin-form-actions">
-            <button type="button" className="button button-wine button-rect" onClick={addProduct}>
-              Add New Product
-            </button>
-            <button type="button" className="button button-wine button-rect" onClick={goToReview}>
-              Review before submit
-            </button>
-          </div>
-        </div>
-      ) : null}
-
-      {step === 'review' ? (
-        <div className="admin-batch-review">
-          <h3>Review {drafts.length} product{drafts.length === 1 ? '' : 's'}</h3>
-          <p>Confirm names, prices and colour images before uploading the batch.</p>
-
-          {busy ? (
-            <div className="admin-batch-progress-panel" aria-live="polite">
-              <p>
-                Uploading {Math.min(submitProgress.current, submitProgress.total)} of{' '}
-                {submitProgress.total}
-                {submitProgress.label ? ` · ${submitProgress.label}` : ''}
-              </p>
-              <div className="admin-progress admin-progress-dark">
-                <div
-                  className="admin-progress-bar"
-                  style={{
-                    width: `${busy && submitProgress.current >= submitProgress.total ? 100 : progressPercent}%`,
-                  }}
-                />
+      <div className="admin-upload-layout">
+        <div className="admin-upload-main">
+          {stage === 'details' ? (
+            <section className="admin-upload-card">
+              <div className="admin-upload-card-head">
+                <span className="admin-upload-card-icon" aria-hidden="true">
+                  ▢
+                </span>
+                <div>
+                  <h3>1. Product Details</h3>
+                  <p>Set the core catalogue information for this design.</p>
+                </div>
               </div>
-            </div>
+
+              <div className="admin-upload-fields">
+                <label className="admin-field">
+                  <span>
+                    Product Name <abbr title="required">*</abbr>
+                  </span>
+                  <input
+                    value={draft.name}
+                    onChange={(event) => patchDraft({ name: event.target.value })}
+                    placeholder="e.g. Elegant Women's Handbag"
+                    maxLength={160}
+                  />
+                </label>
+
+                <label className="admin-field">
+                  <span>
+                    Category <abbr title="required">*</abbr>
+                  </span>
+                  <select
+                    value={draft.category}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      const category = activeCategories.find(
+                        (entry) => entry.slug === value || entry.id === value,
+                      );
+                      patchDraft({
+                        category: value,
+                        categoryLabel: category?.name || '',
+                      });
+                    }}
+                  >
+                    <option value="">Select a category</option>
+                    {activeCategories.map((category) => (
+                      <option key={category.id || category.slug} value={category.slug || category.id}>
+                        {category.name}
+                      </option>
+                    ))}
+                  </select>
+                  {activeCategories.length === 0 ? (
+                    <span className="admin-char-count">
+                      No active categories loaded yet. Check Categories in admin, then reopen Upload.
+                    </span>
+                  ) : null}
+                </label>
+
+                <label className="admin-field admin-batch-full">
+                  <span>Product Description</span>
+                  <textarea
+                    rows={5}
+                    value={draft.description}
+                    onChange={(event) => patchDraft({ description: event.target.value.slice(0, 1000) })}
+                    placeholder="Fabric, finish, styling notes…"
+                    maxLength={1000}
+                  />
+                  <small className="admin-char-count">{String(draft.description || '').length}/1000</small>
+                </label>
+
+                <label className="admin-field">
+                  <span>
+                    Base Price (₦) <abbr title="required">*</abbr>
+                  </span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={draft.price}
+                    onChange={(event) => patchDraft({ price: event.target.value })}
+                    placeholder="25000"
+                  />
+                </label>
+
+                <label className="admin-field">
+                  <span>Total Stock fallback</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={draft.stock}
+                    onChange={(event) => patchDraft({ stock: event.target.value })}
+                    placeholder="Used only if colour stock is empty"
+                  />
+                </label>
+              </div>
+
+              <AdminProductPlacement
+                bestSeller={draft.bestSeller}
+                newArrival={draft.newArrival}
+                disabled={busy}
+                onChange={(patch) => patchDraft(patch)}
+              />
+
+              <div className="admin-check-row">
+                <label className="admin-check">
+                  <input
+                    type="checkbox"
+                    checked={draft.featured}
+                    onChange={(event) => patchDraft({ featured: event.target.checked })}
+                  />
+                  Featured elsewhere
+                </label>
+                <label className="admin-check">
+                  <input
+                    type="checkbox"
+                    checked={draft.active}
+                    onChange={(event) => patchDraft({ active: event.target.checked })}
+                  />
+                  Publish immediately
+                </label>
+              </div>
+            </section>
           ) : null}
 
-          <ul className="admin-batch-review-list">
-            {drafts.map((draft, index) => {
-              const colourLabels = (draft.colours || [])
-                .filter((colour) => colour.label)
-                .map((colour) => colour.label);
-              const imageCount = (draft.colours || []).reduce(
-                (sum, colour) => sum + (colour.images?.length || 0),
-                0,
-              );
-              const preview =
-                draft.colours?.find((colour) => colour.images?.length)?.images?.[0] || '';
-              return (
-                <li key={draft.clientId}>
-                  <div className="admin-batch-review-item">
-                    {preview ? (
-                      <img src={preview} alt="" className="admin-batch-thumb" />
-                    ) : (
-                      <span className="admin-batch-thumb is-empty" aria-hidden="true" />
-                    )}
-                    <div>
-                      <strong>
-                        {index + 1}. {draft.name}
-                      </strong>
-                      <p className="admin-muted">
-                        {formatNaira(Number(draft.price) || 0)} · {colourLabels.join(', ') || 'No colours'}{' '}
-                        · {imageCount} image{imageCount === 1 ? '' : 's'}
-                      </p>
-                    </div>
-                  </div>
-                  {draft.createdProductId ? (
-                    <span className="admin-status is-on">Already saved</span>
-                  ) : draft.uploadStatus === 'uploading' ? (
-                    <span className="admin-status">Uploading…</span>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
-          <div className="admin-form-actions">
-            <button
-              type="button"
-              className="button button-wine button-rect"
-              onClick={() => setStep('workspace')}
-              disabled={busy}
-            >
-              Back to editing
-            </button>
-            <button
-              type="button"
-              className="button button-wine button-rect"
-              onClick={submitBatch}
-              disabled={busy}
-            >
-              {busy
-                ? `Uploading ${submitProgress.current}/${submitProgress.total}…`
-                : `Submit ${drafts.length} product${drafts.length === 1 ? '' : 's'}`}
-            </button>
-          </div>
-        </div>
-      ) : null}
-
-      {step === 'results' ? (
-        <div className="admin-batch-results">
-          <h3>Upload results</h3>
-          <p className="admin-batch-summary">
-            {successCount} succeeded · {failedCount} failed · {results.length} total
-          </p>
-          <ul className="admin-batch-review-list">
-            {results.map((entry) => (
-              <li key={entry.clientId}>
-                <div>
-                  <strong>{entry.name}</strong>
-                  <p className="admin-muted">{entry.message}</p>
-                </div>
-                <span className={entry.ok ? 'admin-status is-on' : 'admin-status'}>
-                  {entry.ok ? 'Success' : 'Failed'}
+          {stage === 'variants' ? (
+            <section className="admin-upload-card">
+              <div className="admin-upload-card-head">
+                <span className="admin-upload-card-icon" aria-hidden="true">
+                  ◈
                 </span>
-              </li>
-            ))}
-          </ul>
-          <div className="admin-form-actions">
-            {results.some((entry) => !entry.ok) ? (
-              <button type="button" className="button button-wine button-rect" onClick={retryFailed}>
-                Retry failed products
+                <div>
+                  <h3>2. Product Variants</h3>
+                  <p>Choose colours and optional sizes. Assign sizes per colour when they differ.</p>
+                </div>
+              </div>
+
+              <AdminColourPalette
+                selected={selectedForPalette}
+                disabled={busy}
+                onToggle={toggleColour}
+                onAddCustom={toggleColour}
+              />
+
+              <AdminSizeSelector
+                selected={draft.sizes || []}
+                disabled={busy}
+                title="Choose Sizes"
+                help="Optional. Select shared sizes, then apply them to every colour — or set sizes per colour below."
+                onChange={(sizes) => patchDraft({ sizes })}
+                onApplyToAll={applySharedSizesToAll}
+                showApplyToAll={draft.colours.length > 0}
+              />
+
+              {draft.colours.length ? (
+                <div className="admin-variant-size-list">
+                  <h4>Size assignment by colour</h4>
+                  {draft.colours.map((colour) => (
+                    <div key={colour.id} className="admin-variant-size-row">
+                      <div className="admin-colour-title">
+                        <span
+                          className="admin-swatch"
+                          style={{ background: colourSwatchHex(colour.label, colour.hex) }}
+                          aria-hidden="true"
+                        />
+                        <strong>{colour.label}</strong>
+                      </div>
+                      <AdminSizeSelector
+                        selected={Array.isArray(colour.sizes) ? colour.sizes : []}
+                        disabled={busy}
+                        title={`Sizes for ${colour.label}`}
+                        help=""
+                        chipLimit={6}
+                        onChange={(sizes) => patchColour(colour.id, { sizes })}
+                      />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="admin-muted">Select colours above to manage per-colour sizes.</p>
+              )}
+            </section>
+          ) : null}
+
+          {stage === 'images' ? (
+            <section className="admin-upload-card">
+              <div className="admin-upload-card-head">
+                <span className="admin-upload-card-icon" aria-hidden="true">
+                  ▤
+                </span>
+                <div>
+                  <h3>3. Images by Colour</h3>
+                  <p>
+                    Upload multiple photos inside each colour section. Images stay on that colour only.
+                  </p>
+                </div>
+              </div>
+
+              {!draft.colours.length ? (
+                <p className="admin-muted">Go back to Variants and choose at least one colour first.</p>
+              ) : (
+                <div className="admin-colour-image-grid">
+                  {draft.colours.map((colour) => {
+                    const isUploading = uploadingColourId === colour.id;
+                    return (
+                      <article key={colour.id} className="admin-colour-upload-card">
+                        <header className="admin-colour-upload-head">
+                          <div className="admin-colour-title">
+                            <span
+                              className="admin-swatch"
+                              style={{ background: colourSwatchHex(colour.label, colour.hex) }}
+                              aria-hidden="true"
+                            />
+                            <strong>{colour.label} Variant</strong>
+                          </div>
+                          <span className="admin-image-count">
+                            {colour.images?.length || 0} image
+                            {(colour.images?.length || 0) === 1 ? '' : 's'}
+                          </span>
+                        </header>
+
+                        <label
+                          className={`admin-dropzone${dragOverId === colour.id ? ' is-dragover' : ''}${isUploading ? ' is-uploading' : ''}`}
+                          onDragOver={(event) => {
+                            event.preventDefault();
+                            setDragOverId(colour.id);
+                          }}
+                          onDragLeave={() => setDragOverId('')}
+                          onDrop={(event) => {
+                            event.preventDefault();
+                            setDragOverId('');
+                            uploadFilesToColour(colour.id, event.dataTransfer.files);
+                          }}
+                        >
+                          <span className="admin-dropzone-title">
+                            {isUploading
+                              ? `Uploading… ${uploadProgress}%`
+                              : `Upload ${colour.label} Photos`}
+                          </span>
+                          <span className="admin-dropzone-help">
+                            Select multiple images, or drag and drop them here.
+                          </span>
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/jpg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+                            multiple
+                            hidden
+                            disabled={busy || Boolean(uploadingColourId)}
+                            onChange={(event) => {
+                              uploadFilesToColour(colour.id, event.target.files);
+                              event.target.value = '';
+                            }}
+                          />
+                        </label>
+
+                        {isUploading ? (
+                          <div className="admin-progress admin-progress-dark" aria-hidden="true">
+                            <div className="admin-progress-bar" style={{ width: `${uploadProgress}%` }} />
+                          </div>
+                        ) : null}
+
+                        {colour.images?.length ? (
+                          <ul className="admin-image-grid">
+                            {colour.images.map((url, imageIndex) => (
+                              <li key={`${url}-${imageIndex}`}>
+                                <img src={url} alt="" />
+                                <div className="admin-image-actions">
+                                  <button
+                                    type="button"
+                                    className={`text-button${colour.mainIndex === imageIndex ? ' is-active' : ''}`}
+                                    onClick={() => patchColour(colour.id, { mainIndex: imageIndex })}
+                                    disabled={busy}
+                                  >
+                                    {colour.mainIndex === imageIndex ? 'Main image' : 'Set main'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="text-button"
+                                    disabled={busy || imageIndex === 0}
+                                    onClick={() => {
+                                      if (imageIndex === 0) return;
+                                      const images = [...colour.images];
+                                      [images[imageIndex - 1], images[imageIndex]] = [
+                                        images[imageIndex],
+                                        images[imageIndex - 1],
+                                      ];
+                                      const mainIndex =
+                                        colour.mainIndex === imageIndex
+                                          ? imageIndex - 1
+                                          : colour.mainIndex === imageIndex - 1
+                                            ? imageIndex
+                                            : colour.mainIndex;
+                                      patchColour(colour.id, { images, mainIndex });
+                                    }}
+                                  >
+                                    Move left
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="text-button admin-danger"
+                                    onClick={() => {
+                                      const images = colour.images.filter((_, index) => index !== imageIndex);
+                                      const mainIndex =
+                                        images.length === 0
+                                          ? 0
+                                          : Math.min(
+                                              colour.mainIndex >= imageIndex
+                                                ? Math.max(0, colour.mainIndex - 1)
+                                                : colour.mainIndex,
+                                              images.length - 1,
+                                            );
+                                      patchColour(colour.id, { images, mainIndex });
+                                    }}
+                                    disabled={busy}
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="admin-muted">No images yet for {colour.label}.</p>
+                        )}
+
+                        <div className="admin-colour-fields">
+                          <label className="admin-field">
+                            <span>Variant Stock</span>
+                            <input
+                              type="number"
+                              min="0"
+                              value={colour.stock}
+                              onChange={(event) => patchColour(colour.id, { stock: event.target.value })}
+                              placeholder="Enter stock"
+                              disabled={busy}
+                            />
+                          </label>
+                          <label className="admin-field">
+                            <span>Optional price override (₦)</span>
+                            <input
+                              type="number"
+                              min="0"
+                              value={colour.price}
+                              onChange={(event) => patchColour(colour.id, { price: event.target.value })}
+                              placeholder="Leave blank for base price"
+                              disabled={busy}
+                            />
+                          </label>
+                          <label className="admin-check admin-colour-available">
+                            <input
+                              type="checkbox"
+                              checked={colour.available !== false}
+                              onChange={(event) =>
+                                patchColour(colour.id, { available: event.target.checked })
+                              }
+                              disabled={busy}
+                            />
+                            Colour available for purchase
+                          </label>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          ) : null}
+
+          {stage === 'review' ? (
+            <section className="admin-upload-card">
+              <div className="admin-upload-card-head">
+                <span className="admin-upload-card-icon" aria-hidden="true">
+                  ✓
+                </span>
+                <div>
+                  <h3>4. Review and Save</h3>
+                  <p>Confirm everything before creating one parent product with its variants.</p>
+                </div>
+              </div>
+
+              <dl className="admin-review-summary">
+                <div>
+                  <dt>Product Name</dt>
+                  <dd>{draft.name || '—'}</dd>
+                </div>
+                <div>
+                  <dt>Category</dt>
+                  <dd>{selectedCategory?.name || draft.categoryLabel || '—'}</dd>
+                </div>
+                <div>
+                  <dt>Base Price</dt>
+                  <dd>{formatNaira(Number(draft.price) || 0)}</dd>
+                </div>
+                <div>
+                  <dt>Homepage placement</dt>
+                  <dd>
+                    {[
+                      draft.bestSeller ? 'Best Sellers' : null,
+                      draft.newArrival ? 'New Arrivals' : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ') || 'None selected'}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Colours</dt>
+                  <dd>
+                    {draft.colours.map((colour) => colour.label).join(', ') || '—'}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Sizes</dt>
+                  <dd>
+                    {[
+                      ...new Set([
+                        ...(draft.sizes || []),
+                        ...draft.colours.flatMap((colour) => colour.sizes || []),
+                      ]),
+                    ].join(', ') || 'None'}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Total Images</dt>
+                  <dd>{totalImages}</dd>
+                </div>
+                <div className="admin-batch-full">
+                  <dt>Variant stock</dt>
+                  <dd>
+                    {draft.colours
+                      .map(
+                        (colour) =>
+                          `${colour.label}: ${colour.stock !== '' && colour.stock != null ? colour.stock : 'fallback'}`,
+                      )
+                      .join(' · ') || '—'}
+                  </dd>
+                </div>
+              </dl>
+            </section>
+          ) : null}
+
+          <div className="admin-upload-nav">
+            {currentStage > 0 ? (
+              <button type="button" className="button button-wine button-rect" onClick={goBack} disabled={busy}>
+                Back
               </button>
-            ) : null}
-            <button type="button" className="button button-wine button-rect" onClick={onClose}>
-              Done
-            </button>
+            ) : (
+              <button type="button" className="button button-wine button-rect" onClick={onClose} disabled={busy}>
+                Cancel
+              </button>
+            )}
+            {stage !== 'review' ? (
+              <button type="button" className="button button-wine button-rect" onClick={goNext} disabled={busy}>
+                Continue
+              </button>
+            ) : (
+              <div className="admin-upload-save-actions">
+                <button
+                  type="button"
+                  className="button button-wine button-rect"
+                  onClick={() => saveProduct({ addAnother: true })}
+                  disabled={busy || Boolean(uploadingColourId)}
+                >
+                  {busy ? 'Saving…' : 'Save & Add Another'}
+                </button>
+                <button
+                  type="button"
+                  className="button button-wine button-rect"
+                  onClick={() => saveProduct()}
+                  disabled={busy || Boolean(uploadingColourId)}
+                >
+                  {busy ? 'Saving…' : 'Save Product'}
+                </button>
+              </div>
+            )}
           </div>
         </div>
-      ) : null}
+
+        <aside className="admin-upload-preview" aria-label="Live preview">
+          <div className="admin-upload-preview-card">
+            <p className="eyebrow">Live Preview</p>
+            <div className="admin-upload-preview-media">
+              {previewImage ? (
+                <img src={previewImage} alt="" />
+              ) : (
+                <div className="admin-upload-preview-empty">Product image preview</div>
+              )}
+            </div>
+            <h3>{draft.name || 'Product name'}</h3>
+            <p className="admin-upload-preview-price">
+              {formatNaira(Number(previewColour?.price || draft.price) || 0)}
+            </p>
+            <label className="admin-field">
+              <span>Colour</span>
+              <select value={previewColour?.label || ''} disabled>
+                {(draft.colours.length ? draft.colours : [{ label: 'No colours yet' }]).map((colour) => (
+                  <option key={colour.label} value={colour.label}>
+                    {colour.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="admin-field">
+              <span>Size</span>
+              <select disabled>
+                {(previewColour?.sizes?.length
+                  ? previewColour.sizes
+                  : draft.sizes?.length
+                    ? draft.sizes
+                    : ['No sizes']
+                ).map((size) => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button type="button" className="button button-wine button-rect button-block" disabled>
+              Add to Cart
+            </button>
+            <button type="button" className="button button-wine button-rect button-block" disabled>
+              WhatsApp Order
+            </button>
+          </div>
+        </aside>
+      </div>
     </section>
   );
 }

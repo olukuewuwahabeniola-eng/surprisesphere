@@ -9,6 +9,8 @@ const slideSchema = new mongoose.Schema(
     href: { type: String, default: '/shop' },
     image: { type: String, required: true },
     alt: { type: String, default: '' },
+    active: { type: Boolean, default: true },
+    sortOrder: { type: Number, default: 0 },
   },
   { _id: false },
 );

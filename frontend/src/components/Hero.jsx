@@ -43,6 +43,9 @@ export default function Hero({ slides }) {
                 className={mediaIndex === index ? 'hero-frame is-active' : 'hero-frame'}
                 src={item.image}
                 alt=""
+                loading={mediaIndex === 0 ? 'eager' : 'lazy'}
+                fetchPriority={mediaIndex === 0 ? 'high' : 'auto'}
+                decoding="async"
                 style={{ transitionDuration: `${CROSSFADE_MS}ms` }}
               />
             ))}

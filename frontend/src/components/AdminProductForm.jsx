@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import AdminColourVariantsEditor from './AdminColourVariantsEditor';
+import AdminProductPlacement from './AdminProductPlacement';
 import {
   draftToProductPayload,
   productToColourDrafts,
@@ -163,7 +164,7 @@ export default function AdminProductForm({
           >
             <option value="">Select a category</option>
             {categories.map((category) => (
-              <option key={category.id} value={category.id}>
+              <option key={category.id || category.slug} value={category.slug || category.id}>
                 {category.name}
                 {category.active === false ? ' (inactive)' : ''}
               </option>
@@ -193,6 +194,13 @@ export default function AdminProductForm({
         />
       </label>
 
+      <AdminProductPlacement
+        bestSeller={form.bestSeller}
+        newArrival={form.newArrival}
+        disabled={busy}
+        onChange={(patch) => onChange({ ...form, ...patch })}
+      />
+
       <AdminColourVariantsEditor
         colours={form.colourVariants || []}
         sharedSizes={form.sizes || []}
@@ -207,26 +215,10 @@ export default function AdminProductForm({
         <label className="admin-check">
           <input
             type="checkbox"
-            checked={form.bestSeller}
-            onChange={(event) => setField('bestSeller', event.target.checked)}
-          />
-          Best Seller
-        </label>
-        <label className="admin-check">
-          <input
-            type="checkbox"
-            checked={form.newArrival}
-            onChange={(event) => setField('newArrival', event.target.checked)}
-          />
-          New Arrival
-        </label>
-        <label className="admin-check">
-          <input
-            type="checkbox"
             checked={form.featured}
             onChange={(event) => setField('featured', event.target.checked)}
           />
-          Featured
+          Featured elsewhere
         </label>
         <label className="admin-check">
           <input

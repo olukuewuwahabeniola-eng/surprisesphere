@@ -1,12 +1,17 @@
-import { dbState, isDbConnected } from '../config/db.js';
+import { dbState, ensureConnected, isDbConnected } from '../config/db.js';
 import { getHomepageBanners, getHomepagePayload } from '../services/homepageService.js';
 import { listFeaturedProducts } from '../services/productService.js';
 import { listActiveCategories } from '../services/categoryService.js';
 import { seedGetHomepage, seedListFeatured } from '../services/seedFallback.js';
 import { getStoreSettings } from '../services/storeService.js';
 
+async function dbReadyForRead() {
+  if (isDbConnected()) return true;
+  return ensureConnected({ retries: 2, waitMs: 500 });
+}
+
 export async function getHomepage(req, res) {
-  if (!isDbConnected()) {
+  if (!(await dbReadyForRead())) {
     const store = await getStoreSettings();
     res.json({ ...seedGetHomepage(), store });
     return;
@@ -16,7 +21,7 @@ export async function getHomepage(req, res) {
 }
 
 export async function getBanners(req, res) {
-  if (!isDbConnected()) {
+  if (!(await dbReadyForRead())) {
     const seed = seedGetHomepage();
     res.json({
       announcement: seed.announcement,
@@ -32,7 +37,7 @@ export async function getBanners(req, res) {
 }
 
 export async function getFeaturedHomepageProducts(req, res) {
-  if (!isDbConnected()) {
+  if (!(await dbReadyForRead())) {
     res.json(seedListFeatured({ page: 1, pageSize: 5, sort: 'newest' }));
     return;
   }
@@ -45,7 +50,7 @@ export async function getFeaturedHomepageProducts(req, res) {
 }
 
 export async function getFeaturedHomepageCategories(req, res) {
-  if (!isDbConnected()) {
+  if (!(await dbReadyForRead())) {
     const seed = seedGetHomepage();
     res.json({
       categories: seed.categories,
@@ -54,12 +59,8 @@ export async function getFeaturedHomepageCategories(req, res) {
     });
     return;
   }
-  const result = await listActiveCategories({ featuredOnly: true });
-  if (result.categories.length === 0) {
-    const all = await listActiveCategories();
-    res.json({ ...all, categories: all.categories.slice(0, 7) });
-    return;
-  }
+  // Keep public category endpoints aligned with admin: every active category is available.
+  const result = await listActiveCategories();
   res.json(result);
 }
 
@@ -68,7 +69,10 @@ export function getHealth(req, res) {
     ok: true,
     service: 'surprise-fashion-sphere-api',
     database: dbState.status,
+    databaseConnected: isDbConnected(),
     databaseError: dbState.lastError || undefined,
+    databaseLastConnectedAt: dbState.lastConnectedAt || undefined,
+    databaseReconnectAttempts: dbState.reconnectAttempts || 0,
     mongoUriConfigured: Boolean(process.env.MONGO_URI || process.env.MONGODB_URI),
   });
 }

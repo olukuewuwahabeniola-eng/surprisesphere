@@ -57,6 +57,20 @@ export default function AdminProductsPage() {
     return map;
   }, [categories]);
 
+  const loadCategories = useCallback(async () => {
+    if (!adminKey) {
+      return [];
+    }
+    const categoryData = await listAdminCategories(adminKey, {
+      status: 'all',
+      pageSize: 100,
+      sort: 'name',
+    });
+    const next = categoryData.categories || [];
+    setCategories(next);
+    return next;
+  }, [adminKey]);
+
   const loadCatalogue = useCallback(async () => {
     if (!adminKey) {
       setAuthorized(false);
@@ -67,23 +81,25 @@ export default function AdminProductsPage() {
     setStatus('loading');
     setError('');
     try {
-      const [productData, categoryData] = await Promise.all([
-        listAdminProducts(adminKey, {
-          page,
-          pageSize: PAGE_SIZE,
-          status: statusFilter,
-          category: categoryFilter || undefined,
-          q: search || undefined,
-          sort,
-        }),
-        listAdminCategories(adminKey, { status: 'all', pageSize: 100, sort: 'name' }),
-      ]);
+      // Load products and categories independently so a flaky Mongo hiccup
+      // on one request does not wipe the other (especially the upload dropdown).
+      const productPromise = listAdminProducts(adminKey, {
+        page,
+        pageSize: PAGE_SIZE,
+        status: statusFilter,
+        category: categoryFilter || undefined,
+        q: search || undefined,
+        sort,
+      });
+      const categoryPromise = loadCategories().catch(() => null);
 
+      const productData = await productPromise;
       setProducts(productData.products || []);
       setPagination(productData.pagination || null);
-      setCategories(categoryData.categories || []);
       setAuthorized(true);
       setStatus('ready');
+
+      await categoryPromise;
     } catch (err) {
       const message = readError(err, 'Could not load admin products.');
       setError(message);
@@ -92,7 +108,7 @@ export default function AdminProductsPage() {
         setAuthorized(false);
       }
     }
-  }, [adminKey, page, statusFilter, categoryFilter, search, sort]);
+  }, [adminKey, page, statusFilter, categoryFilter, search, sort, loadCategories]);
 
   useEffect(() => {
     loadCatalogue();
@@ -120,20 +136,30 @@ export default function AdminProductsPage() {
     setNote('');
   }
 
-  function openUpload() {
+  async function openUpload() {
     setMode('upload');
     setEditingId('');
     setForm(blankProductForm());
     setNote('');
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    try {
+      await loadCategories();
+    } catch (err) {
+      setError(readError(err, 'Could not load categories for product upload.'));
+    }
   }
 
-  function openEdit(product) {
+  async function openEdit(product) {
     setMode('edit');
     setEditingId(product.id);
     setForm(productToForm(product));
     setNote('');
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    try {
+      await loadCategories();
+    } catch (err) {
+      setError(readError(err, 'Could not load categories for product editing.'));
+    }
   }
 
   function closeEditor() {

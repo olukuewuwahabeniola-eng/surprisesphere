@@ -1,4 +1,3 @@
-import { isDbConnected } from '../config/db.js';
 import {
   createCategory,
   deleteCategory,
@@ -7,16 +6,7 @@ import {
   reorderCategories,
   updateCategory,
 } from '../services/categoryService.js';
-import { AppError } from '../utils/AppError.js';
-
-function assertMongoForAdminWrite() {
-  if (!isDbConnected()) {
-    throw new AppError(
-      'MongoDB must be connected to manage categories. Start MongoDB and set MONGO_URI, then try again.',
-      503,
-    );
-  }
-}
+import { assertMongoReady } from '../utils/assertMongo.js';
 
 function stripSecrets(body = {}) {
   const next = { ...body };
@@ -25,7 +15,9 @@ function stripSecrets(body = {}) {
 }
 
 export async function listAdminCategoriesHandler(req, res) {
-  assertMongoForAdminWrite();
+  await assertMongoReady(
+    'MongoDB must be connected to manage categories. Start MongoDB and set MONGO_URI, then try again.',
+  );
   const result = await listAdminCategories(req.query || {});
   res.json({
     title: 'Admin categories',
@@ -35,13 +27,17 @@ export async function listAdminCategoriesHandler(req, res) {
 }
 
 export async function getAdminCategoryHandler(req, res) {
-  assertMongoForAdminWrite();
+  await assertMongoReady(
+    'MongoDB must be connected to manage categories. Start MongoDB and set MONGO_URI, then try again.',
+  );
   const result = await getAdminCategoryByIdOrSlug(req.params.idOrSlug);
   res.json(result);
 }
 
 export async function createAdminCategoryHandler(req, res) {
-  assertMongoForAdminWrite();
+  await assertMongoReady(
+    'MongoDB must be connected to manage categories. Start MongoDB and set MONGO_URI, then try again.',
+  );
   const result = await createCategory(stripSecrets(req.body || {}));
   res.status(201).json({
     message: 'Category created.',
@@ -50,7 +46,9 @@ export async function createAdminCategoryHandler(req, res) {
 }
 
 export async function updateAdminCategoryHandler(req, res) {
-  assertMongoForAdminWrite();
+  await assertMongoReady(
+    'MongoDB must be connected to manage categories. Start MongoDB and set MONGO_URI, then try again.',
+  );
   const result = await updateCategory(req.params.idOrSlug, stripSecrets(req.body || {}));
   res.json({
     message: 'Category updated.',
@@ -59,13 +57,17 @@ export async function updateAdminCategoryHandler(req, res) {
 }
 
 export async function reorderAdminCategoriesHandler(req, res) {
-  assertMongoForAdminWrite();
+  await assertMongoReady(
+    'MongoDB must be connected to manage categories. Start MongoDB and set MONGO_URI, then try again.',
+  );
   const result = await reorderCategories(stripSecrets(req.body || {}));
   res.json(result);
 }
 
 export async function deleteAdminCategoryHandler(req, res) {
-  assertMongoForAdminWrite();
+  await assertMongoReady(
+    'MongoDB must be connected to manage categories. Start MongoDB and set MONGO_URI, then try again.',
+  );
   const result = await deleteCategory(req.params.idOrSlug);
   res.json(result);
 }

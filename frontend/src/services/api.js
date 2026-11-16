@@ -145,6 +145,34 @@ export function deleteAdminProduct(adminKey, idOrSlug) {
     .then((response) => response.data);
 }
 
+export function getAdminHomepage(adminKey) {
+  return api
+    .get('/api/admin/homepage', {
+      headers: adminHeaders(adminKey),
+    })
+    .then((response) => response.data);
+}
+
+export function getAdminHeroImageLibrary(adminKey) {
+  return api
+    .get('/api/admin/homepage/image-library', {
+      headers: adminHeaders(adminKey),
+    })
+    .then((response) => response.data);
+}
+
+export function saveAdminHeroSlides(adminKey, heroSlides) {
+  return api
+    .put(
+      '/api/admin/homepage/hero-slides',
+      { heroSlides },
+      {
+        headers: adminHeaders(adminKey),
+      },
+    )
+    .then((response) => response.data);
+}
+
 export function listAdminCategories(adminKey, params = {}) {
   return api
     .get('/api/admin/categories', {

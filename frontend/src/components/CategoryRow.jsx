@@ -11,7 +11,13 @@ function CategoryCard({ category, duplicate = false }) {
       aria-hidden={duplicate ? true : undefined}
     >
       <span className="category-card-media">
-        <img src={category.image} alt={duplicate ? '' : category.alt} draggable="false" />
+        <img
+          src={category.image}
+          alt={duplicate ? '' : category.alt}
+          draggable="false"
+          loading="lazy"
+          decoding="async"
+        />
       </span>
       <span>{category.name}</span>
     </Link>

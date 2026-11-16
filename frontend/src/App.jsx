@@ -3,6 +3,7 @@ import AdminLayout from './components/admin/AdminLayout';
 import Layout from './components/Layout';
 import AdminCategoriesPage from './pages/AdminCategoriesPage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
+import AdminHeroSlidesPage from './pages/AdminHeroSlidesPage';
 import AdminOrdersPage from './pages/AdminOrdersPage';
 import AdminPlaceholderPage from './pages/AdminPlaceholderPage';
 import AdminProductsPage from './pages/AdminProductsPage';
@@ -27,7 +28,7 @@ export default function App() {
         <Route path="customers" element={<AdminPlaceholderPage section="customers" />} />
         <Route path="categories" element={<AdminCategoriesPage />} />
         <Route path="promotions" element={<AdminPlaceholderPage section="promotions" />} />
-        <Route path="hero-slides" element={<AdminPlaceholderPage section="hero-slides" />} />
+        <Route path="hero-slides" element={<AdminHeroSlidesPage />} />
         <Route path="settings" element={<AdminPlaceholderPage section="settings" />} />
         <Route path="support" element={<AdminPlaceholderPage section="support" />} />
         <Route path="*" element={<Navigate to="/admin" replace />} />

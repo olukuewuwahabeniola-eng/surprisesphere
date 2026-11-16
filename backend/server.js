@@ -4,17 +4,19 @@ import { dbState } from './config/db.js';
 const port = Number(process.env.PORT) || 5050;
 
 async function start() {
-  await ensureDb();
-
+  // Listen first so the API stays reachable even while Atlas is reconnecting.
   app.listen(port, () => {
     console.log(`API listening on http://localhost:${port}`);
     console.log(`Database status: ${dbState.status}`);
-    if (dbState.status !== 'connected') {
-      console.warn(
-        'Product data is serving from temporary seed fallback until MongoDB is connected and seeded.',
-      );
-    }
   });
+
+  const connected = await ensureDb();
+  console.log(`Database status: ${dbState.status}`);
+  if (!connected) {
+    console.warn(
+      'MongoDB is not connected yet. Background reconnect is active; seed fallback may serve until it recovers.',
+    );
+  }
 }
 
 start().catch((error) => {

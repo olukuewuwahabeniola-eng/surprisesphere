@@ -12,10 +12,8 @@ import {
 } from '../services/api';
 import { formatNaira } from '../utils/money';
 import {
-  colourSwatchHex,
   getAvailableColours,
   getAvailableSizes,
-  getColourOptions,
   getImagesForColour,
   getSelectionStock,
   isSelectionPurchasable,
@@ -61,7 +59,6 @@ export default function ProductDetailPage() {
   const [note, setNote] = useState('');
   const [added, setAdded] = useState(false);
 
-  const colourOptions = useMemo(() => getColourOptions(product), [product]);
   const [colour, setColour] = useState('');
   const [size, setSize] = useState('');
   const colours = useMemo(() => getAvailableColours(product), [product]);
@@ -305,60 +302,31 @@ export default function ProductDetailPage() {
             {product.description ? <p className="product-detail-copy">{product.description}</p> : null}
 
             {(sizes.length > 0 || colours.length > 0) && (
-              <div className="product-detail-options">
-                {sizes.length > 0 && (
-                  <fieldset>
-                    <legend>Size</legend>
-                    <div className="option-chip-row">
-                      {sizes.map((entry) => (
-                        <button
-                          key={entry}
-                          type="button"
-                          className={size === entry ? 'option-chip is-active' : 'option-chip'}
-                          onClick={() => setSize(entry)}
-                        >
-                          {entry}
-                        </button>
-                      ))}
-                    </div>
-                  </fieldset>
-                )}
-                {colours.length > 0 && (
-                  <fieldset>
-                    <legend>Colour{colour ? `: ${colour}` : ''}</legend>
-                    <div className="product-swatches product-swatches-lg" role="listbox" aria-label="Available colours">
-                      {colours.map((entry) => {
-                        const option = colourOptions.find((item) => item.label === entry);
-                        return (
-                          <button
-                            key={entry}
-                            type="button"
-                            role="option"
-                            aria-selected={colour === entry}
-                            className={`product-swatch${colour === entry ? ' is-selected' : ''}`}
-                            title={entry}
-                            style={{ background: colourSwatchHex(entry, option?.hex) }}
-                            onClick={() => setColour(entry)}
-                          >
-                            <span className="sr-only">{entry}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <div className="option-chip-row">
+              <div className="product-detail-options product-option-stack">
+                {colours.length > 0 ? (
+                  <label className="product-detail-select">
+                    <span>Colour</span>
+                    <select value={colour} onChange={(event) => setColour(event.target.value)}>
                       {colours.map((entry) => (
-                        <button
-                          key={`chip-${entry}`}
-                          type="button"
-                          className={colour === entry ? 'option-chip is-active' : 'option-chip'}
-                          onClick={() => setColour(entry)}
-                        >
+                        <option key={entry} value={entry}>
                           {entry}
-                        </button>
+                        </option>
                       ))}
-                    </div>
-                  </fieldset>
-                )}
+                    </select>
+                  </label>
+                ) : null}
+                {sizes.length > 0 ? (
+                  <label className="product-detail-select">
+                    <span>Size</span>
+                    <select value={size} onChange={(event) => setSize(event.target.value)}>
+                      {sizes.map((entry) => (
+                        <option key={entry} value={entry}>
+                          {entry}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
               </div>
             )}
 

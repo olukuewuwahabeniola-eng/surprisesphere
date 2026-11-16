@@ -4,7 +4,6 @@ import { CompactProductRating } from './StarRating';
 import { useShop } from '../context/ShopContext';
 import { formatNaira } from '../utils/money';
 import {
-  colourSwatchHex,
   getAvailableSizes,
   getColourOptions,
   getImagesForColour,
@@ -100,9 +99,22 @@ export default function ProductCard({ product, index = 0 }) {
     >
       <div className={`product-media${hoverImage ? ' has-hover-swap' : ''}`}>
         <Link to={`/product/${product.slug || product.id}`} className="product-media-link">
-          <img className="product-image is-primary" src={displayImage} alt={product.alt} />
+          <img
+            className="product-image is-primary"
+            src={displayImage}
+            alt={product.alt}
+            loading={index < 4 ? 'eager' : 'lazy'}
+            decoding="async"
+          />
           {hoverImage ? (
-            <img className="product-image is-secondary" src={hoverImage} alt="" aria-hidden="true" />
+            <img
+              className="product-image is-secondary"
+              src={hoverImage}
+              alt=""
+              aria-hidden="true"
+              loading="lazy"
+              decoding="async"
+            />
           ) : null}
         </Link>
         <button
@@ -125,42 +137,37 @@ export default function ProductCard({ product, index = 0 }) {
         />
         <p className="product-price">{formatNaira(selection.price)}</p>
 
-        {colourOptions.length > 0 ? (
-          <div className="product-swatches" role="listbox" aria-label={`Colours for ${product.name}`}>
-            {colourOptions.map((entry) => {
-              const selected = entry.label === colour;
-              return (
-                <button
-                  key={entry.label}
-                  type="button"
-                  role="option"
-                  aria-selected={selected}
-                  className={`product-swatch${selected ? ' is-selected' : ''}`}
-                  title={entry.label}
-                  style={{ background: colourSwatchHex(entry.label, entry.hex) }}
-                  onClick={() => setColour(entry.label)}
-                >
-                  <span className="sr-only">{entry.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        ) : null}
+        <div className="product-option-stack">
+          {colourOptions.length > 0 ? (
+            <div className="product-options">
+              <label>
+                <span className="sr-only">Colour for {product.name}</span>
+                <select value={colour} onChange={(event) => setColour(event.target.value)}>
+                  {colourOptions.map((entry) => (
+                    <option key={entry.label} value={entry.label}>
+                      Colour: {entry.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          ) : null}
 
-        {sizes.length > 0 ? (
-          <div className="product-options">
-            <label>
-              <span className="sr-only">Size for {product.name}</span>
-              <select value={size} onChange={(event) => setSize(event.target.value)}>
-                {sizes.map((entry) => (
-                  <option key={entry} value={entry}>
-                    Size: {entry}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-        ) : null}
+          {sizes.length > 0 ? (
+            <div className="product-options">
+              <label>
+                <span className="sr-only">Size for {product.name}</span>
+                <select value={size} onChange={(event) => setSize(event.target.value)}>
+                  {sizes.map((entry) => (
+                    <option key={entry} value={entry}>
+                      Size: {entry}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          ) : null}
+        </div>
 
         {note && <p className="product-option-note">{note}</p>}
 

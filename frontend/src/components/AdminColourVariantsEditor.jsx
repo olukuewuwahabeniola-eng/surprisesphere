@@ -19,7 +19,7 @@ export default function AdminColourVariantsEditor({
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState('');
   const [expandedId, setExpandedId] = useState('');
-  const [localPreviews, setLocalPreviews] = useState({});
+  const [dragOverId, setDragOverId] = useState('');
 
   const coloursRef = useRef(colours);
   const sharedSizesRef = useRef(sharedSizes);
@@ -36,17 +36,6 @@ export default function AdminColourVariantsEditor({
   useEffect(() => {
     onChangeRef.current = onChange;
   }, [onChange]);
-
-  useEffect(
-    () => () => {
-      Object.values(localPreviews).forEach((urls) => {
-        (urls || []).forEach((url) => URL.revokeObjectURL(url));
-      });
-    },
-    // Revoke only on unmount; live map is cleared per upload finish.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
-  );
 
   const selectedForPalette = useMemo(
     () =>
@@ -70,8 +59,7 @@ export default function AdminColourVariantsEditor({
       current.map((colour) => [String(colour.label || '').trim().toLowerCase(), colour]),
     );
     const next = nextSelected.map((entry) => {
-      const key = entry.label.toLowerCase();
-      const existing = byLabel.get(key);
+      const existing = byLabel.get(entry.label.toLowerCase());
       if (existing) {
         return {
           ...existing,
@@ -86,41 +74,27 @@ export default function AdminColourVariantsEditor({
       });
     });
     commitColours(next.length ? next : []);
-    if (next.length) {
-      setExpandedId(next[next.length - 1].id);
-    }
+    if (next.length) setExpandedId(next[next.length - 1].id);
   }
 
   function toggleColour(colour) {
     const key = colour.label.toLowerCase();
     const exists = selectedForPalette.some((entry) => entry.label.toLowerCase() === key);
-    if (exists) {
-      syncColoursFromSelection(selectedForPalette.filter((entry) => entry.label.toLowerCase() !== key));
-      return;
-    }
-    syncColoursFromSelection([...selectedForPalette, colour]);
-  }
-
-  function addCustomColour(colour) {
-    toggleColour(colour);
+    syncColoursFromSelection(
+      exists
+        ? selectedForPalette.filter((entry) => entry.label.toLowerCase() !== key)
+        : [...selectedForPalette, colour],
+    );
   }
 
   function patchColourById(colourId, patch) {
     const current = coloursRef.current;
-    const index = current.findIndex((colour) => colour.id === colourId);
-    if (index < 0) {
-      return null;
-    }
-    const next = current.map((colour, colourIndex) =>
-      colourIndex === index ? { ...colour, ...patch } : colour,
-    );
+    const next = current.map((colour) => (colour.id === colourId ? { ...colour, ...patch } : colour));
     commitColours(next);
-    return next[index];
   }
 
   function updateColour(index, patch) {
-    const current = coloursRef.current;
-    const target = current[index];
+    const target = coloursRef.current[index];
     if (!target) return;
     patchColourById(target.id, patch);
   }
@@ -134,17 +108,6 @@ export default function AdminColourVariantsEditor({
     );
   }
 
-  function clearLocalPreview(colourId) {
-    setLocalPreviews((current) => {
-      const urls = current[colourId] || [];
-      urls.forEach((url) => URL.revokeObjectURL(url));
-      if (!(colourId in current)) return current;
-      const next = { ...current };
-      delete next[colourId];
-      return next;
-    });
-  }
-
   async function handleUpload(colourId, fileList) {
     const check = validateImageFiles(fileList);
     if (!check.ok) {
@@ -156,23 +119,13 @@ export default function AdminColourVariantsEditor({
       return;
     }
 
-    const colour = coloursRef.current.find((entry) => entry.id === colourId);
-    if (!colour) {
-      setError('That colour variant is no longer available. Select the colour again.');
-      return;
-    }
-
-    const files = check.files;
-    const previewUrls = files.map((file) => URL.createObjectURL(file));
-    clearLocalPreview(colourId);
-    setLocalPreviews((current) => ({ ...current, [colourId]: previewUrls }));
-    setExpandedId(colourId);
     setError('');
+    setExpandedId(colourId);
     setUploadingId(colourId);
     setProgress(0);
-
     try {
       const urls = [];
+      const files = check.files;
       for (let start = 0; start < files.length; start += 8) {
         const chunk = files.slice(start, start + 8);
         const result = await uploadAdminImages(adminKey, chunk, {
@@ -187,27 +140,20 @@ export default function AdminColourVariantsEditor({
           if (image?.url) urls.push(image.url);
         });
       }
-
-      if (!urls.length) {
-        throw new Error('The server did not return any image URLs.');
-      }
-
+      if (!urls.length) throw new Error('The server did not return any image URLs.');
       const latest = coloursRef.current.find((entry) => entry.id === colourId);
       if (!latest) {
-        setError('Upload finished, but that colour was removed before images could be saved. Add the colour again and retry.');
+        setError('That colour was removed before images could be saved.');
         return;
       }
-
-      const merged = [...(latest.images || []), ...urls];
       patchColourById(colourId, {
-        images: merged,
+        images: [...(latest.images || []), ...urls],
         mainIndex: latest.images?.length ? latest.mainIndex : 0,
       });
       setProgress(100);
     } catch (err) {
       setError(readError(err, 'Could not upload colour images.'));
     } finally {
-      clearLocalPreview(colourId);
       setUploadingId('');
       window.setTimeout(() => setProgress(0), 600);
     }
@@ -233,8 +179,8 @@ export default function AdminColourVariantsEditor({
         <div>
           <h3>Colour variants</h3>
           <p>
-            Group every colour under this one product. Each colour keeps its own pictures, sizes,
-            stock and availability.
+            Choose colours with the compact selector, then manage images, stock and sizes for each
+            colour separately.
           </p>
         </div>
       </div>
@@ -249,14 +195,14 @@ export default function AdminColourVariantsEditor({
         selected={selectedForPalette}
         disabled={disabled || Boolean(uploadingId)}
         onToggle={toggleColour}
-        onAddCustom={addCustomColour}
+        onAddCustom={toggleColour}
       />
 
       <AdminSizeSelector
         selected={sharedSizes}
         disabled={disabled}
-        title="Shared sizes"
-        help="Optional. Select sizes once, then apply them to every colour — or set sizes per colour below."
+        title="Choose Sizes"
+        help="Optional shared sizes. Apply them to every colour, or set sizes per colour below."
         onChange={onSharedSizesChange}
         onApplyToAll={applySharedSizesToAll}
         showApplyToAll={colours.length > 0}
@@ -269,9 +215,8 @@ export default function AdminColourVariantsEditor({
 
         {colours.map((colour, index) => {
           const swatch = colourSwatchHex(colour.label, colour.hex);
-          const isUploading = uploadingId && uploadingId === colour.id;
+          const isUploading = uploadingId === colour.id;
           const isOpen = expandedId === colour.id || (!expandedId && index === 0);
-          const pending = localPreviews[colour.id] || [];
           return (
             <article
               key={colour.id || index}
@@ -287,7 +232,6 @@ export default function AdminColourVariantsEditor({
                   <strong>{colour.label || `Colour ${index + 1}`}</strong>
                   <span className="admin-muted">
                     {colour.images?.length || 0} image{(colour.images?.length || 0) === 1 ? '' : 's'}
-                    {colour.available === false ? ' · Unavailable' : ''}
                   </span>
                   <span aria-hidden="true">{isOpen ? '−' : '+'}</span>
                 </button>
@@ -332,9 +276,7 @@ export default function AdminColourVariantsEditor({
                       <input
                         type="checkbox"
                         checked={colour.available !== false}
-                        onChange={(event) =>
-                          updateColour(index, { available: event.target.checked })
-                        }
+                        onChange={(event) => updateColour(index, { available: event.target.checked })}
                         disabled={disabled}
                       />
                       Colour available for purchase
@@ -345,79 +287,80 @@ export default function AdminColourVariantsEditor({
                     selected={Array.isArray(colour.sizes) ? colour.sizes : []}
                     disabled={disabled}
                     title={`Sizes for ${colour.label || 'this colour'}`}
-                    help="Pick sizes available in this colour. Leave empty if this product has no sizes."
+                    help="Leave empty if this product has no sizes."
                     onChange={(sizes) => updateColour(index, { sizes })}
                   />
 
-                  <div className="admin-colour-images">
-                    <div className="admin-colour-images-head">
-                      <p>
-                        Images for {colour.label || 'this colour'}
-                        {productName ? ` · ${productName}` : ''}
-                      </p>
-                      <label className="button button-wine button-rect admin-file-button">
-                        {isUploading ? `Uploading… ${progress}%` : 'Upload images'}
-                        <input
-                          type="file"
-                          accept="image/jpeg,image/jpg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
-                          multiple
-                          hidden
-                          disabled={disabled || Boolean(uploadingId)}
-                          onChange={(event) => {
-                            handleUpload(colour.id, event.target.files);
-                            event.target.value = '';
-                          }}
-                        />
-                      </label>
+                  <label
+                    className={`admin-dropzone${dragOverId === colour.id ? ' is-dragover' : ''}`}
+                    onDragOver={(event) => {
+                      event.preventDefault();
+                      setDragOverId(colour.id);
+                    }}
+                    onDragLeave={() => setDragOverId('')}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      setDragOverId('');
+                      handleUpload(colour.id, event.dataTransfer.files);
+                    }}
+                  >
+                    <span className="admin-dropzone-title">
+                      {isUploading
+                        ? `Uploading… ${progress}%`
+                        : `Upload ${colour.label || 'colour'} Photos`}
+                      {productName ? ` · ${productName}` : ''}
+                    </span>
+                    <span className="admin-dropzone-help">
+                      Select multiple images together, or drag and drop them here.
+                    </span>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/jpg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+                      multiple
+                      hidden
+                      disabled={disabled || Boolean(uploadingId)}
+                      onChange={(event) => {
+                        handleUpload(colour.id, event.target.files);
+                        event.target.value = '';
+                      }}
+                    />
+                  </label>
+
+                  {isUploading ? (
+                    <div className="admin-progress admin-progress-dark" aria-hidden="true">
+                      <div className="admin-progress-bar" style={{ width: `${progress}%` }} />
                     </div>
+                  ) : null}
 
-                    {isUploading ? (
-                      <div className="admin-progress admin-progress-dark" aria-hidden="true">
-                        <div className="admin-progress-bar" style={{ width: `${progress}%` }} />
-                      </div>
-                    ) : null}
-
-                    {pending.length ? (
-                      <ul className="admin-image-grid admin-image-grid-pending" aria-label="Upload preview">
-                        {pending.map((url) => (
-                          <li key={url}>
-                            <img src={url} alt="" />
-                            <p className="admin-muted">Uploading…</p>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : null}
-
-                    {colour.images?.length ? (
-                      <ul className="admin-image-grid">
-                        {colour.images.map((url, imageIndex) => (
-                          <li key={`${url}-${imageIndex}`}>
-                            <img src={url} alt="" />
-                            <div className="admin-image-actions">
-                              <button
-                                type="button"
-                                className={`text-button${colour.mainIndex === imageIndex ? ' is-active' : ''}`}
-                                onClick={() => updateColour(index, { mainIndex: imageIndex })}
-                                disabled={disabled || Boolean(uploadingId)}
-                              >
-                                {colour.mainIndex === imageIndex ? 'Main image' : 'Set main'}
-                              </button>
-                              <button
-                                type="button"
-                                className="text-button admin-danger"
-                                onClick={() => removeImage(index, imageIndex)}
-                                disabled={disabled || Boolean(uploadingId)}
-                              >
-                                Remove
-                              </button>
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : !pending.length ? (
-                      <p className="admin-muted">No images yet for this colour.</p>
-                    ) : null}
-                  </div>
+                  {colour.images?.length ? (
+                    <ul className="admin-image-grid">
+                      {colour.images.map((url, imageIndex) => (
+                        <li key={`${url}-${imageIndex}`}>
+                          <img src={url} alt="" />
+                          <div className="admin-image-actions">
+                            <button
+                              type="button"
+                              className={`text-button${colour.mainIndex === imageIndex ? ' is-active' : ''}`}
+                              onClick={() => updateColour(index, { mainIndex: imageIndex })}
+                              disabled={disabled}
+                            >
+                              {colour.mainIndex === imageIndex ? 'Main image' : 'Set main'}
+                            </button>
+                            <button
+                              type="button"
+                              className="text-button admin-danger"
+                              onClick={() => removeImage(index, imageIndex)}
+                              disabled={disabled}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="admin-muted">No images yet for this colour.</p>
+                  )}
                 </>
               ) : null}
             </article>

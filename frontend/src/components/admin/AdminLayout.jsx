@@ -10,7 +10,7 @@ const NAV_ITEMS = [
   { to: '/admin/customers', label: 'Customers', ready: false },
   { to: '/admin/categories', label: 'Categories', ready: true },
   { to: '/admin/promotions', label: 'Promotions', ready: false },
-  { to: '/admin/hero-slides', label: 'Hero Slides', ready: false },
+  { to: '/admin/hero-slides', label: 'Hero Slides', ready: true },
   { to: '/admin/whatsapp', label: 'WhatsApp Settings', ready: true },
   { to: '/admin/analytics', label: 'Analytics', ready: true },
   { to: '/admin/settings', label: 'Settings', ready: false },

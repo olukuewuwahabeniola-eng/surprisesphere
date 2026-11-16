@@ -1,6 +1,6 @@
 import { getStoreSettings, updateStoreSettings } from '../services/storeService.js';
 import { isDbConnected } from '../config/db.js';
-import { AppError } from '../utils/AppError.js';
+import { assertMongoReady } from '../utils/assertMongo.js';
 
 export async function getStore(_req, res) {
   const store = await getStoreSettings();
@@ -11,9 +11,7 @@ export async function getStore(_req, res) {
 }
 
 export async function putStore(req, res) {
-  if (!isDbConnected()) {
-    throw new AppError('MongoDB must be connected to save the WhatsApp business number.', 503);
-  }
+  await assertMongoReady('MongoDB must be connected to save the WhatsApp business number.');
 
   const store = await updateStoreSettings({
     whatsappNumber: req.body?.whatsappNumber,

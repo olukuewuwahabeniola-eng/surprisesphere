@@ -9,6 +9,7 @@
     "dev": "nodemon server.js",
     "start": "node server.js",
     "seed": "node scripts/seed.js",
+    "apply:surprise-images": "node scripts/applySurpriseImages.js",
     "test:product-payload": "node scripts/testProductPayload.js",
     "test:admin-products": "node scripts/testAdminProductCrud.js",
     "test:admin-categories": "node scripts/testAdminCategoryCrud.js",
